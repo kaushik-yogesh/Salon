@@ -6,7 +6,7 @@ const CustomerHistoryPage = () => {
   const { data: history, isLoading } = useQuery({
     queryKey: ['customer-history'],
     queryFn: async () => {
-      const res = await api.get('/customer-portal/appointments?status=past');
+      const res = await api.get('/customer-portal/bookings?status=past');
       return res.data.data.appointments;
     }
   });
