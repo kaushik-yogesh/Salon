@@ -14,8 +14,7 @@ export const getSalons = async (req, res, next) => {
           select: {
             id: true,
             name: true,
-            address: true,
-            phone: true
+            address: true
           }
         },
         _count: {
