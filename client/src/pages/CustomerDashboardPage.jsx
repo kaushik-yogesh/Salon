@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
@@ -6,6 +6,9 @@ import api from '../api/axios';
 
 const CustomerDashboardPage = () => {
   const { user } = useAuthStore();
+  const [showQrModal, setShowQrModal] = useState(false);
+  const [activeQrCode, setActiveQrCode] = useState(null);
+  const [qrLoading, setQrLoading] = useState(false);
 
   const { data: dashboardData, isLoading, refetch } = useQuery({
     queryKey: ['customer-dashboard'],
@@ -61,6 +64,25 @@ const CustomerDashboardPage = () => {
                     {app.status !== 'CANCELLED' && app.status !== 'COMPLETED' && (
                       <button 
                         onClick={async () => {
+                          setQrLoading(true);
+                          try {
+                            const res = await api.get(`/customer-portal/bookings/${app.id}/qr`);
+                            setActiveQrCode(res.data.data.qrBase64);
+                            setShowQrModal(true);
+                          } catch (err) {
+                            alert(err.response?.data?.error?.message || 'Failed to generate QR');
+                          } finally {
+                            setQrLoading(false);
+                          }
+                        }}
+                        className="text-sm font-medium text-pink-600 hover:text-pink-800 bg-pink-50 px-4 py-2 rounded-lg"
+                      >
+                        Show QR
+                      </button>
+                    )}
+                    {app.status !== 'CANCELLED' && app.status !== 'COMPLETED' && (
+                      <button 
+                        onClick={async () => {
                           if (window.confirm('Are you sure you want to cancel this appointment?')) {
                             try {
                               await api.post(`/customer-portal/bookings/${app.id}/cancel`);
@@ -82,6 +104,28 @@ const CustomerDashboardPage = () => {
           )}
         </div>
       </div>
+
+      {showQrModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white p-6 rounded-2xl shadow-xl max-w-sm w-full mx-4 text-center">
+            <h2 className="text-xl font-bold mb-4">Your Appointment QR</h2>
+            <p className="text-sm text-gray-500 mb-6">Show this QR code to the worker at the salon to begin your service.</p>
+            {activeQrCode ? (
+              <img src={activeQrCode} alt="Appointment QR Code" className="w-64 h-64 mx-auto mb-6" />
+            ) : (
+              <div className="w-64 h-64 mx-auto mb-6 bg-gray-100 flex items-center justify-center rounded-xl">
+                Loading...
+              </div>
+            )}
+            <button 
+              onClick={() => setShowQrModal(false)}
+              className="w-full bg-gray-900 text-white font-bold py-3 rounded-xl"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 flex flex-col justify-between">

@@ -212,6 +212,33 @@ export const cancelBooking = async (req, res, next) => {
   }
 };
 
+import { generateAppointmentQR } from '../utils/qr.service.js';
+
+export const getBookingQR = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const { id } = req.params;
+
+    const appointment = await prisma.appointment.findUnique({
+      where: { id },
+      include: { customer: true }
+    });
+
+    if (!appointment) throw new NotFoundError('Appointment not found');
+    if (appointment.customer.userId !== userId) throw new AppError('Unauthorized access to this appointment', 403);
+
+    let qrBase64;
+    // Generate new QR code dynamically (updates the DB with new token on every request for security)
+    if (appointment.status !== 'CANCELLED' && appointment.status !== 'COMPLETED') {
+      qrBase64 = await generateAppointmentQR(id);
+    }
+
+    sendSuccess(res, { qrBase64 });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const getWallets = async (req, res, next) => {
   try {
     const userId = req.user.id;

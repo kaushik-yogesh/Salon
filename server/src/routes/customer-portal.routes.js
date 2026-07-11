@@ -7,9 +7,10 @@ const router = express.Router();
 router.use(requireAuth);
 
 router.get('/dashboard', portalController.getDashboard);
-router.get('/appointments', portalController.getAppointments);
+router.get('/bookings', portalController.getAppointments);
 router.post('/bookings', portalController.createBooking);
 router.post('/bookings/:id/cancel', portalController.cancelBooking);
+router.get('/bookings/:id/qr', portalController.getBookingQR);
 router.get('/wallets', portalController.getWallets);
 router.put('/profile', portalController.updateProfile);
 

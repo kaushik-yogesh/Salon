@@ -26,9 +26,8 @@ export const generateAppointmentQR = async (appointmentId) => {
   });
 
   // 3. Generate QR code (Base64 string)
-  // We embed just the token or a URL that includes the token
-  const qrData = JSON.stringify({ token, appointmentId });
-  const qrBase64 = await QRCode.toDataURL(qrData, {
+  // We embed just the raw token so the scanner can directly query the database
+  const qrBase64 = await QRCode.toDataURL(token, {
     errorCorrectionLevel: 'H',
     type: 'image/png',
     margin: 2,

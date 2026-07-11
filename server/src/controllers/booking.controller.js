@@ -10,10 +10,24 @@ export const getAppointments = async (req, res, next) => {
     const tenantId = req.tenant.id;
     const { branchId, date } = req.query;
 
+    let dateRange = {};
+    if (date) {
+      const startOfDay = new Date(date);
+      startOfDay.setUTCHours(0, 0, 0, 0);
+      const endOfDay = new Date(startOfDay);
+      endOfDay.setDate(endOfDay.getDate() + 1);
+      dateRange = {
+        date: {
+          gte: startOfDay,
+          lt: endOfDay
+        }
+      };
+    }
+
     const where = {
       tenantId,
       ...(branchId && { branchId }),
-      ...(date && { date: new Date(date) })
+      ...dateRange
     };
     
     const appointments = await prisma.appointment.findMany({
