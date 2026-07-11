@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 
 const OwnerLayout = () => {
   const { user, logout } = useAuthStore();
   const location = useLocation();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const navItems = [
     { path: '/owner', label: 'Dashboard', icon: '📊' },
@@ -22,9 +23,9 @@ const OwnerLayout = () => {
   ];
 
   return (
-    <div className="flex h-screen bg-gray-50 font-sans">
-      {/* Sidebar */}
-      <aside className="w-64 bg-white border-r border-gray-200 flex flex-col hidden md:flex shadow-sm">
+    <div className="flex h-screen bg-gray-50 font-sans relative">
+      {/* Sidebar - Desktop & Mobile overlay */}
+      <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 shadow-sm flex flex-col transform transition-transform duration-300 ease-in-out md:relative md:translate-x-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="p-6 border-b border-gray-100 flex items-center justify-center">
           <h1 className="text-2xl font-bold text-indigo-700">SalonOS</h1>
           <span className="ml-2 text-xs font-semibold bg-indigo-100 text-indigo-800 px-2 py-1 rounded-full">OWNER</span>
@@ -37,6 +38,7 @@ const OwnerLayout = () => {
               <Link
                 key={item.path}
                 to={item.path}
+                onClick={() => setIsMobileMenuOpen(false)}
                 className={`flex items-center px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
                   isActive 
                     ? 'bg-indigo-50 text-indigo-700' 
@@ -70,12 +72,27 @@ const OwnerLayout = () => {
         </div>
       </aside>
 
+      {/* Mobile Backdrop */}
+      {isMobileMenuOpen && (
+        <div 
+          className="fixed inset-0 bg-gray-900 bg-opacity-50 z-40 md:hidden"
+          onClick={() => setIsMobileMenuOpen(false)}
+        ></div>
+      )}
+
       {/* Main Content */}
-      <main className="flex-1 flex flex-col overflow-hidden">
+      <main className="flex-1 flex flex-col overflow-hidden w-full">
         {/* Mobile Header */}
-        <header className="md:hidden bg-white border-b border-gray-200 p-4 flex justify-between items-center">
+        <header className="md:hidden bg-white border-b border-gray-200 p-4 flex justify-between items-center z-30">
           <h1 className="text-xl font-bold text-indigo-700">SalonOS Owner</h1>
-          <button className="text-gray-500">☰</button>
+          <button 
+            className="text-gray-500 hover:text-gray-700 focus:outline-none p-2"
+            onClick={() => setIsMobileMenuOpen(true)}
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
         </header>
 
         <div className="flex-1 overflow-y-auto p-4 md:p-8">

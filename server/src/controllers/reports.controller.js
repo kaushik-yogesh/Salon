@@ -53,13 +53,21 @@ export const getDashboardMetrics = async (req, res, next) => {
     // 4. Net Profit
     const netProfit = grossRevenue - (totalPayroll + operatingExpenses);
 
+    // 5. Recent Activity (Latest 5 Invoices)
+    const recentActivity = await prisma.invoice.findMany({
+      where: { tenantId },
+      orderBy: { createdAt: 'desc' },
+      take: 5
+    });
+
     sendSuccess(res, {
       period: { startDate, endDate },
       metrics: {
         grossRevenue,
         totalPayroll,
         operatingExpenses,
-        netProfit
+        netProfit,
+        recentActivity
       }
     });
   } catch (error) {

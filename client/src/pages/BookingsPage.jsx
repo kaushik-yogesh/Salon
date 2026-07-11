@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import api from '../api/axios';
 
 const BookingsPage = () => {
@@ -45,9 +46,9 @@ const BookingsPage = () => {
             onChange={(e) => setActiveDate(e.target.value)}
             className="border border-gray-300 rounded-md p-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary"
           />
-          <button className="bg-primary text-white px-4 py-2 rounded-md hover:bg-opacity-90 transition">
+          <Link to="/owner/pos" className="bg-primary text-white px-4 py-2 rounded-md hover:bg-opacity-90 transition inline-block">
             + New Appointment
-          </button>
+          </Link>
         </div>
       </div>
 
