@@ -132,8 +132,8 @@ const SetupWizardPage = () => {
     setError("");
     try {
       // Get created categories
-      const catRes = await api.get("/catalog/categories");
-      const existingCats = catRes.data.data || [];
+      const catRes = await api.get("/catalog");
+      const existingCats = catRes.data.data.categories || [];
       if (existingCats.length === 0) {
         setError("Please create categories first (Step 4)");
         setIsLoading(false);
