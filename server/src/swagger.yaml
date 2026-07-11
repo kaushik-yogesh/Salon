@@ -1,0 +1,102 @@
+openapi: 3.0.0
+info:
+  title: SalonOS API
+  description: Enterprise REST API for SalonOS Backend
+  version: 1.0.0
+
+servers:
+  - url: /api/v1
+    description: Current API Version
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Tenant:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        status: { type: string }
+    User:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        status: { type: string }
+    Appointment:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        status: { type: string }
+        date: { type: string, format: date }
+        totalPrice: { type: number }
+    Invoice:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        grandTotal: { type: number }
+        status: { type: string }
+    Expense:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        category: { type: string }
+        amount: { type: number }
+        status: { type: string }
+
+security:
+  - bearerAuth: []
+
+paths:
+  /health:
+    get:
+      summary: Health check endpoint
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: OK }
+                  timestamp: { type: string, format: date-time }
+
+  /auth/login:
+    post:
+      summary: Authenticate a user and return a JWT
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string }
+                password: { type: string }
+      responses:
+        '200':
+          description: Login successful
+
+  /reports/dashboard:
+    get:
+      summary: Retrieve aggregated dashboard metrics (P&L)
+      parameters:
+        - in: query
+          name: startDate
+          required: true
+          schema: { type: string, format: date-time }
+        - in: query
+          name: endDate
+          required: true
+          schema: { type: string, format: date-time }
+      responses:
+        '200':
+          description: Returns Gross Revenue, Expenses, Payroll, and Net Profit.

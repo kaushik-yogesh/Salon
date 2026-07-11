@@ -1,0 +1,662 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------
+// Organization Hierarchy
+// ---------------------------------------------------------
+
+model Tenant {
+  id               String    @id @default(uuid())
+  name             String
+  status           String    @default("ACTIVE") // ACTIVE, SUSPENDED
+  subscriptionTier String    @default("BASIC")
+  defaultCurrency  String    @default("USD")
+  defaultTimezone  String    @default("UTC")
+  setupComplete    Boolean   @default(false)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
+
+  branches        Branch[]
+  users           User[]
+  roles           Role[]
+  activityLogs    ActivityLog[]
+  invitations     Invitation[]
+  ServiceCategory ServiceCategory[]
+  Service         Service[]
+  Package         Package[]
+  WorkerProfile   WorkerProfile[]
+  Customer        Customer[]
+  Appointment     Appointment[]
+  Invoice         Invoice[]
+  Product         Product[]
+  ExecutionLog    ExecutionLog[]
+  AuditLog        AuditLog[]
+  NotificationLog NotificationLog[]
+  SalaryRun       SalaryRun[]
+  Expense         Expense[]
+}
+
+model Branch {
+  id        String    @id @default(uuid())
+  tenantId  String
+  name      String
+  address   String?
+  capacity  Int       @default(10)
+  status    String    @default("ACTIVE")
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  tenant      Tenant             @relation(fields: [tenantId], references: [id])
+  assignments BranchAssignment[]
+  Appointment Appointment[]
+  Invoice     Invoice[]
+  Product     Product[]
+  Expense     Expense[]
+}
+
+// ---------------------------------------------------------
+// Identity & RBAC
+// ---------------------------------------------------------
+
+model User {
+  id           String    @id @default(uuid())
+  tenantId     String?   // Nullable for Global Users (e.g. B2C Customers who haven't created a Salon)
+  email        String?   @unique
+  phone        String?   @unique
+  passwordHash String?
+  status       String    @default("ACTIVE") // ACTIVE, SUSPENDED
+  lastLogin    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  tenant        Tenant?            @relation(fields: [tenantId], references: [id])
+  profile       UserProfile?
+  userRoles     UserRole[]
+  branches      BranchAssignment[]
+  sessions      Session[]
+  devices       Device[]
+  WorkerProfile WorkerProfile?
+  pushSubscriptions PushSubscription[]
+  Customer      Customer[]
+}
+
+model UserProfile {
+  id               String   @id @default(uuid())
+  userId           String   @unique
+  firstName        String
+  lastName         String
+  phone            String?
+  photoUrl         String?
+  emergencyContact String?
+  skills           String[] // Array of strings representing skills
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Role {
+  id          String   @id @default(uuid())
+  tenantId    String? // Null means it's a global default role
+  name        String
+  description String?
+  isCustom    Boolean  @default(false)
+  priority    Int      @default(0) // Lower number = higher priority
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant      Tenant?          @relation(fields: [tenantId], references: [id])
+  permissions RolePermission[]
+  users       UserRole[]
+
+  @@unique([tenantId, name])
+}
+
+model Permission {
+  id          String   @id @default(uuid())
+  module      String // e.g., "USERS", "APPOINTMENTS"
+  action      String // e.g., "CREATE", "READ", "UPDATE", "DELETE"
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  roles RolePermission[]
+
+  @@unique([module, action])
+}
+
+model RolePermission {
+  id           String   @id @default(uuid())
+  roleId       String
+  permissionId String
+  createdAt    DateTime @default(now())
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+}
+
+model UserRole {
+  id        String   @id @default(uuid())
+  userId    String
+  roleId    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId])
+}
+
+model BranchAssignment {
+  id        String    @id @default(uuid())
+  userId    String
+  branchId  String
+  isPrimary Boolean   @default(false)
+  startDate DateTime?
+  endDate   DateTime?
+  createdAt DateTime  @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, branchId])
+}
+
+// ---------------------------------------------------------
+// Invitations & Sessions
+// ---------------------------------------------------------
+
+model Invitation {
+  id        String   @id @default(uuid())
+  tenantId  String
+  email     String
+  token     String   @unique
+  roleId    String
+  branchIds String[] // Array of branch IDs
+  status    String   @default("PENDING") // PENDING, ACCEPTED, EXPIRED
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+}
+
+model Device {
+  id         String   @id @default(uuid())
+  userId     String
+  deviceName String // e.g., "iPhone 13 - Safari"
+  ipAddress  String?
+  userAgent  String?
+  isTrusted  Boolean  @default(false)
+  lastActive DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessions Session[]
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  userId       String
+  deviceId     String
+  refreshToken String   @unique // Hashed or plain depending on strategy
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+}
+
+// ---------------------------------------------------------
+// Audit Logs
+// ---------------------------------------------------------
+
+model ActivityLog {
+  id           String   @id @default(uuid())
+  tenantId     String
+  actorId      String? // The User who did it (nullable for system actions)
+  action       String // e.g., "USER_CREATED", "ROLE_UPDATED"
+  resourceType String // e.g., "User", "Role"
+  resourceId   String
+  oldValues    Json?
+  newValues    Json?
+  ipAddress    String?
+  createdAt    DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+}
+
+// ---------------------------------------------------------
+// Catalog & Services
+// ---------------------------------------------------------
+
+model ServiceCategory {
+  id           String   @id @default(uuid())
+  tenantId     String
+  name         String
+  description  String?
+  color        String?
+  displayOrder Int      @default(0)
+  status       String   @default("ACTIVE") // ACTIVE, ARCHIVED
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+  services Service[]
+
+  @@unique([tenantId, name])
+}
+
+model Service {
+  id           String   @id @default(uuid())
+  tenantId     String
+  categoryId   String
+  name         String
+  description  String?
+  basePrice    Float
+  baseDuration Int // in minutes
+  taxRate      Float    @default(0.0) // Percentage
+  status       String   @default("ACTIVE")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant             Tenant               @relation(fields: [tenantId], references: [id])
+  category           ServiceCategory      @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  variations         ServiceVariation[]
+  packages           PackageService[]
+  WorkerService      WorkerService[]
+  AppointmentService AppointmentService[]
+
+  @@unique([tenantId, categoryId, name])
+}
+
+model ServiceVariation {
+  id                 String   @id @default(uuid())
+  serviceId          String
+  name               String // e.g., "Long Hair", "Senior Stylist"
+  additionalPrice    Float    @default(0.0)
+  additionalDuration Int      @default(0) // in minutes
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+}
+
+model Package {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  description String?
+  totalPrice  Float
+  status      String   @default("ACTIVE")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant   Tenant           @relation(fields: [tenantId], references: [id])
+  services PackageService[]
+}
+
+model PackageService {
+  id        String   @id @default(uuid())
+  packageId String
+  serviceId String
+  createdAt DateTime @default(now())
+
+  package Package @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@unique([packageId, serviceId])
+}
+
+// ---------------------------------------------------------
+// HR & Worker Management
+// ---------------------------------------------------------
+
+model WorkerProfile {
+  id                 String   @id @default(uuid())
+  userId             String   @unique
+  tenantId           String
+  title              String? // e.g., "Senior Stylist"
+  bio                String?
+  baseCommissionRate Float    @default(0.0) // Flat percentage
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  user               User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant             Tenant               @relation(fields: [tenantId], references: [id])
+  services           WorkerService[]
+  schedules          WorkerSchedule[]
+  timeOff            TimeOffRequest[]
+  AppointmentService AppointmentService[]
+  ExecutionLog       ExecutionLog[]
+  SalaryRunItem      SalaryRunItem[]
+}
+
+model WorkerService {
+  id                 String   @id @default(uuid())
+  workerProfileId    String
+  serviceId          String
+  overridePrice      Float?
+  overrideDuration   Int? // in minutes
+  overrideCommission Float?
+  createdAt          DateTime @default(now())
+
+  workerProfile WorkerProfile @relation(fields: [workerProfileId], references: [id], onDelete: Cascade)
+  service       Service       @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@unique([workerProfileId, serviceId])
+}
+
+model WorkerSchedule {
+  id              String   @id @default(uuid())
+  workerProfileId String
+  dayOfWeek       Int // 0 = Sunday, 1 = Monday, etc.
+  startTime       String // e.g., "09:00"
+  endTime         String // e.g., "17:00"
+  isWorking       Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  workerProfile WorkerProfile @relation(fields: [workerProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([workerProfileId, dayOfWeek])
+}
+
+model TimeOffRequest {
+  id              String   @id @default(uuid())
+  workerProfileId String
+  startDate       DateTime
+  endDate         DateTime
+  reason          String?
+  status          String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  workerProfile WorkerProfile @relation(fields: [workerProfileId], references: [id], onDelete: Cascade)
+}
+
+// ---------------------------------------------------------
+// Booking Engine & Customers
+// ---------------------------------------------------------
+
+model Customer {
+  id            String   @id @default(uuid())
+  tenantId      String
+  userId        String?  // Link to the Global User identity
+  firstName     String
+  lastName      String
+  phone         String?
+  email         String?
+  notes         String?
+  lifetimeValue Float    @default(0.0)
+  walletBalance Float    @default(0.0)
+  loyaltyPoints Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tenant          Tenant            @relation(fields: [tenantId], references: [id])
+  user            User?             @relation(fields: [userId], references: [id])
+  appointments    Appointment[]
+  NotificationLog NotificationLog[]
+
+  @@unique([tenantId, email])
+}
+
+model Appointment {
+  id            String   @id @default(uuid())
+  tenantId      String
+  branchId      String
+  customerId    String
+  status        String   @default("PENDING") // PENDING, CONFIRMED, IN_PROGRESS, COMPLETED, CANCELLED, NO_SHOW
+  date          DateTime @db.Date // Store only the date part YYYY-MM-DD
+  totalPrice    Float    @default(0.0)
+  totalDuration Int      @default(0) // Total minutes
+  notes         String?
+  qrToken       String?  @unique
+  qrExpiresAt   DateTime?
+  qrUsedAt      DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tenant       Tenant               @relation(fields: [tenantId], references: [id])
+  branch       Branch               @relation(fields: [branchId], references: [id])
+  customer     Customer             @relation(fields: [customerId], references: [id])
+  services     AppointmentService[]
+  ExecutionLog ExecutionLog[]
+}
+
+model AppointmentService {
+  id              String   @id @default(uuid())
+  appointmentId   String
+  serviceId       String
+  workerProfileId String
+  startTime       DateTime // The exact start timestamp of this specific service block
+  endTime         DateTime // The exact end timestamp of this specific service block
+  price           Float
+  status          String   @default("PENDING") // PENDING, COMPLETED
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  appointment Appointment   @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  service     Service       @relation(fields: [serviceId], references: [id])
+  worker      WorkerProfile @relation(fields: [workerProfileId], references: [id])
+}
+
+// ---------------------------------------------------------
+// POS & Billing Engine
+// ---------------------------------------------------------
+
+model Invoice {
+  id            String   @id @default(uuid())
+  tenantId      String
+  branchId      String
+  appointmentId String?  @unique // Nullable for walk-in retail sales
+  customerId    String?
+  subtotal      Float    @default(0.0)
+  taxTotal      Float    @default(0.0)
+  discountTotal Float    @default(0.0)
+  grandTotal    Float    @default(0.0)
+  status        String   @default("DRAFT") // DRAFT, PAID, VOID, REFUNDED
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tenant    Tenant            @relation(fields: [tenantId], references: [id])
+  branch    Branch            @relation(fields: [branchId], references: [id])
+  lineItems InvoiceLineItem[]
+  payments  Payment[]
+}
+
+model InvoiceLineItem {
+  id              String   @id @default(uuid())
+  invoiceId       String
+  type            String // SERVICE, PRODUCT, TIP, CUSTOM
+  referenceId     String? // ID of the Service or Product (if applicable)
+  workerProfileId String? // The worker receiving the commission/tip
+  name            String // Display name
+  quantity        Int      @default(1)
+  unitPrice       Float
+  taxAmount       Float    @default(0.0)
+  totalPrice      Float // (quantity * unitPrice) + taxAmount
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+}
+
+model Payment {
+  id            String   @id @default(uuid())
+  invoiceId     String
+  amount        Float
+  method        String // CASH, CARD, GIFT_CARD, OTHER
+  transactionId String? // ID from external gateway (Stripe/Square)
+  status        String   @default("COMPLETED") // PENDING, COMPLETED, FAILED, REFUNDED
+  createdAt     DateTime @default(now())
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+}
+
+// ---------------------------------------------------------
+// Inventory & Execution Engine
+// ---------------------------------------------------------
+
+model Product {
+  id                String   @id @default(uuid())
+  tenantId          String
+  branchId          String
+  sku               String
+  name              String
+  description       String?
+  retailPrice       Float
+  costPrice         Float?
+  stockQuantity     Int      @default(0)
+  lowStockThreshold Int      @default(5)
+  status            String   @default("ACTIVE") // ACTIVE, DISCONTINUED
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  tenant       Tenant                 @relation(fields: [tenantId], references: [id])
+  branch       Branch                 @relation(fields: [branchId], references: [id])
+  transactions InventoryTransaction[]
+
+  @@unique([tenantId, sku])
+}
+
+model InventoryTransaction {
+  id        String   @id @default(uuid())
+  productId String
+  type      String // RESTOCK, SALE, SHRINKAGE, ADJUSTMENT
+  quantity  Int // Can be negative for sales/shrinkage
+  notes     String?
+  createdAt DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+model ExecutionLog {
+  id              String   @id @default(uuid())
+  tenantId        String
+  appointmentId   String
+  workerProfileId String
+  action          String // QR_SCANNED, STARTED, PAUSED, COMPLETED
+  timestamp       DateTime @default(now())
+
+  tenant      Tenant        @relation(fields: [tenantId], references: [id])
+  appointment Appointment   @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  worker      WorkerProfile @relation(fields: [workerProfileId], references: [id])
+}
+
+// ---------------------------------------------------------
+// Enterprise Infrastructure: Audit & Notifications
+// ---------------------------------------------------------
+
+model AuditLog {
+  id           String   @id @default(uuid())
+  tenantId     String
+  actorId      String? // Can be null for system actions
+  action       String // e.g. "USER_CREATED", "INVOICE_PAID", "STOCK_ADJUSTED"
+  resourceType String // e.g. "User", "Invoice", "Product"
+  resourceId   String? // ID of the affected resource
+  newValues    Json? // Snapshot of the changes
+  ipAddress    String?
+  createdAt    DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+model NotificationLog {
+  id         String    @id @default(uuid())
+  tenantId   String
+  customerId String?
+  type       String // "EMAIL", "SMS", "WHATSAPP"
+  status     String // "PENDING", "SENT", "FAILED"
+  subject    String?
+  body       String
+  sentAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+}
+
+// ---------------------------------------------------------
+// Finance & Payroll
+// ---------------------------------------------------------
+
+model SalaryRun {
+  id          String   @id @default(uuid())
+  tenantId    String
+  periodStart DateTime
+  periodEnd   DateTime
+  totalPayout Float    @default(0.0)
+  status      String   @default("DRAFT") // DRAFT, APPROVED, PAID
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant Tenant          @relation(fields: [tenantId], references: [id])
+  items  SalaryRunItem[]
+}
+
+model SalaryRunItem {
+  id              String   @id @default(uuid())
+  salaryRunId     String
+  workerProfileId String
+  baseSalary      Float    @default(0.0)
+  commissionTotal Float    @default(0.0)
+  tipsTotal       Float    @default(0.0)
+  bonusAmount     Float    @default(0.0)
+  overtimeHours   Int      @default(0)
+  netPayout       Float    @default(0.0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  salaryRun     SalaryRun     @relation(fields: [salaryRunId], references: [id], onDelete: Cascade)
+  workerProfile WorkerProfile @relation(fields: [workerProfileId], references: [id])
+}
+
+model Expense {
+  id          String   @id @default(uuid())
+  tenantId    String
+  branchId    String?
+  category    String // SUPPLIES, RENT, UTILITIES, MARKETING, PETTY_CASH, OTHER
+  amount      Float
+  date        DateTime @db.Date
+  description String?
+  receiptUrl  String?
+  status      String   @default("APPROVED") // PENDING, APPROVED, REJECTED
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch Branch? @relation(fields: [branchId], references: [id], onDelete: Cascade)
+}
+
+model PushSubscription {
+  id        String   @id @default(uuid())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model OtpVerification {
+  id         String   @id @default(uuid())
+  identifier String   @unique // email or phone
+  otp        String
+  expiresAt  DateTime
+  attempts   Int      @default(0)
+  createdAt  DateTime @default(now())
+}
