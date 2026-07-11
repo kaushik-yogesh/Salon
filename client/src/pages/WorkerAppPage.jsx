@@ -50,12 +50,13 @@ const WorkerAppPage = () => {
     }
   }, [activeExecution, activeAppointment]);
 
+  // Initialize Scanner
   useEffect(() => {
     if (!activeAppointment && !isLoading && !activeLoading && !activeExecution) {
       const scanner = new Html5QrcodeScanner(
-        'qr-reader',
-        { 
-          fps: 10, 
+        "qr-reader",
+        {
+          fps: 10,
           qrbox: { width: 250, height: 250 },
           supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA],
           rememberLastUsedCamera: true,
@@ -65,8 +66,10 @@ const WorkerAppPage = () => {
       );
 
       const onScanSuccess = async (decodedText) => {
-        if (isScanningStatus) return; // Prevent multiple concurrent scans
-        scanner.clear();
+        if (isScanningRef.current) return; // Prevent multiple concurrent scans using ref
+        isScanningRef.current = true;
+        
+        scanner.clear().catch(e => console.log('Scanner clear error', e));
         setIsScanningStatus(true);
         setScanError(null);
         try {
@@ -81,10 +84,18 @@ const WorkerAppPage = () => {
           setTimeout(() => {
             setScanError(null);
             setIsScanningStatus(false);
+            isScanningRef.current = false;
+            // Only re-render if we haven't successfully loaded an appointment
+            if (!document.getElementById("qr-reader")) return;
             scanner.render(onScanSuccess, onScanFailure);
           }, 3000);
         } finally {
           setIsScanningStatus(false);
+          // Only reset ref if we failed (so they can try again). 
+          // If we succeeded, we don't want to scan anymore.
+          if (!activeAppointmentId) {
+             // Wait, if it succeeded, the component will unmount the scanner.
+          }
         }
       };
 
@@ -95,10 +106,11 @@ const WorkerAppPage = () => {
       scanner.render(onScanSuccess, onScanFailure);
 
       return () => {
+        isScanningRef.current = false;
         scanner.clear().catch(e => console.log('Scanner clear error', e));
       };
     }
-  }, [activeAppointment, isLoading, isScanningStatus, activeLoading, activeExecution]);
+  }, [activeAppointment, isLoading, activeLoading, activeExecution]);
 
   const handleAction = async (action) => {
     if (!activeAppointmentId) return;
