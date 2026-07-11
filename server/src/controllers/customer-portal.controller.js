@@ -221,3 +221,30 @@ export const getWallets = async (req, res, next) => {
     next(error);
   }
 };
+
+export const updateProfile = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const { firstName, lastName, phone } = req.body;
+
+    const updatedProfile = await prisma.userProfile.update({
+      where: { userId },
+      data: {
+        firstName,
+        lastName,
+        phone
+      }
+    });
+
+    if (phone) {
+      await prisma.user.update({
+        where: { id: userId },
+        data: { phone }
+      });
+    }
+
+    sendSuccess(res, { profile: updatedProfile });
+  } catch (error) {
+    next(error);
+  }
+};

@@ -6,8 +6,8 @@ const CustomerAppointmentsPage = () => {
   const { data: appointments = [], isLoading } = useQuery({
     queryKey: ['customer-appointments'],
     queryFn: async () => {
-      const res = await api.get('/customer-auth/appointments');
-      return res.data.data;
+      const res = await api.get('/customer-portal/appointments');
+      return res.data.data.appointments;
     }
   });
 

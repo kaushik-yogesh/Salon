@@ -11,5 +11,6 @@ router.get('/appointments', portalController.getAppointments);
 router.post('/bookings', portalController.createBooking);
 router.post('/bookings/:id/cancel', portalController.cancelBooking);
 router.get('/wallets', portalController.getWallets);
+router.put('/profile', portalController.updateProfile);
 
 export default router;

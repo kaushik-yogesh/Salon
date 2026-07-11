@@ -15,7 +15,7 @@ const CustomerProfilePage = () => {
   const [status, setStatus] = useState('idle');
 
   const updateProfile = useMutation({
-    mutationFn: (data) => api.put('/customer-auth/me', data),
+    mutationFn: (data) => api.put('/customer-portal/profile', data),
     onSuccess: () => {
       setStatus('success');
       setTimeout(() => setStatus('idle'), 3000);

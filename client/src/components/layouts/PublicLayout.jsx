@@ -1,7 +1,16 @@
 import React from 'react';
-import { Link, Outlet } from 'react-router-dom';
+import { Link, Outlet, useNavigate } from 'react-router-dom';
+import { useAuthStore } from '../../store/authStore';
 
 const PublicLayout = () => {
+  const { isAuthenticated, logout, user } = useAuthStore();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/');
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 font-sans flex flex-col">
       <header className="bg-white shadow-sm sticky top-0 z-50">
@@ -21,12 +30,25 @@ const PublicLayout = () => {
             </nav>
 
             <div className="flex items-center space-x-4">
-              <Link to="/login" className="text-slate-600 hover:text-indigo-600 font-medium hidden sm:block">
-                Log in
-              </Link>
-              <Link to="/register" className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-indigo-700 transition shadow-sm hover:shadow">
-                Start Free Trial
-              </Link>
+              {isAuthenticated ? (
+                <>
+                  <Link to={user?.tenantId ? "/owner" : "/customer"} className="text-slate-600 hover:text-indigo-600 font-medium hidden sm:block">
+                    Dashboard
+                  </Link>
+                  <button onClick={handleLogout} className="bg-slate-100 text-slate-700 px-4 py-2 rounded-lg font-medium hover:bg-slate-200 transition shadow-sm hover:shadow">
+                    Log out
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Link to="/login" className="text-slate-600 hover:text-indigo-600 font-medium hidden sm:block">
+                    Log in
+                  </Link>
+                  <Link to="/register" className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-indigo-700 transition shadow-sm hover:shadow">
+                    Start Free Trial
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </div>
