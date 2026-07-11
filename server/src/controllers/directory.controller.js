@@ -19,8 +19,8 @@ export const getSalons = async (req, res, next) => {
         },
         _count: {
           select: {
-            services: true,
-            workers: true
+            Service: true,
+            WorkerProfile: true
           }
         }
       },
