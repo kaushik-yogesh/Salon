@@ -15,7 +15,8 @@ const ReceptionDashboardPage = () => {
   const { data: metrics, isLoading } = useQuery({
     queryKey: ['dashboard-metrics'],
     queryFn: async () => {
-      const res = await api.get('/dashboard/metrics');
+      const localDate = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`;
+      const res = await api.get(`/dashboard/metrics?date=${localDate}`);
       return res.data?.data;
     }
   });

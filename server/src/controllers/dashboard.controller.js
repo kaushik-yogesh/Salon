@@ -21,8 +21,13 @@ export const getDashboardMetrics = async (req, res, next) => {
     });
 
     // Aggregate Appointments for Today
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    let today = new Date();
+    if (req.query.date) {
+      today = new Date(req.query.date);
+      today.setUTCHours(0, 0, 0, 0); // req.query.date is YYYY-MM-DD
+    } else {
+      today.setHours(0, 0, 0, 0);
+    }
     
     const appointmentsToday = await prisma.appointment.count({
       where: {

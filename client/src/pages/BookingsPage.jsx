@@ -3,8 +3,12 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import api from '../api/axios';
 
+const getLocalDateString = (d = new Date()) => {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
 const BookingsPage = () => {
-  const [activeDate, setActiveDate] = useState(new Date().toISOString().split('T')[0]);
+  const [activeDate, setActiveDate] = useState(getLocalDateString());
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['bookings', activeDate],
@@ -14,17 +18,24 @@ const BookingsPage = () => {
       // Extract unique workers from appointments for the calendar headers
       const appointments = res.data?.data || [];
       const workerMap = new Map();
+      let hasUnassigned = false;
+      
       appointments.forEach(app => {
         app.services?.forEach(s => {
           if (s.worker?.user?.profile) {
             workerMap.set(s.worker.id, `${s.worker.user.profile.firstName} (${s.worker.title || 'Stylist'})`);
+          } else {
+            hasUnassigned = true;
           }
         });
       });
       
+      const workers = Array.from(workerMap.values());
+      if (hasUnassigned) workers.push('Unassigned');
+      
       return { 
         appointments, 
-        workers: Array.from(workerMap.values()) 
+        workers
       };
     }
   });
@@ -86,43 +97,46 @@ const BookingsPage = () => {
           {/* Grid Columns */}
           <div className="flex-1 grid grid-cols-3 divide-x divide-gray-200 relative bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwJSIgaGVpZ2h0PSI4MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNMCA4MEwxMDAwMCA4MCIgc3Ryb2tlPSIjZjNmMTRiIiBzdHJva2Utd2lkdGg9IjEiIGZpbGw9Im5vbmUiLz48L3N2Zz4=')]">
             
-            {/* Column 1 */}
-            <div className="relative">
-              {data?.appointments?.length === 0 && (
-                <div className="absolute top-24 left-2 right-2 bg-blue-50 border border-blue-200 rounded p-2 text-xs shadow-sm opacity-50">
-                  <div className="text-blue-600 text-center mt-2">No appointments scheduled</div>
+            {data?.workers?.length === 0 && (
+              <div className="absolute top-24 left-2 right-2 bg-blue-50 border border-blue-200 rounded p-2 text-xs shadow-sm opacity-50 col-span-3">
+                <div className="text-blue-600 text-center mt-2">No appointments scheduled</div>
+              </div>
+            )}
+            
+            {data?.workers?.map(workerName => {
+              return (
+                <div key={workerName} className="relative">
+                  {data?.appointments?.map(app => (
+                    app.services?.map(s => {
+                      const sWorkerName = s.worker?.user?.profile 
+                        ? `${s.worker.user.profile.firstName} (${s.worker.title || 'Stylist'})` 
+                        : 'Unassigned';
+                        
+                      if (sWorkerName !== workerName) return null;
+
+                      const startHour = new Date(s.startTime).getHours();
+                      const startMin = new Date(s.startTime).getMinutes();
+                      // 9 AM is our top (0px). Each hour is 80px (h-20 = 5rem = 80px).
+                      const topOffset = ((startHour - 9) * 80) + ((startMin / 60) * 80);
+                      
+                      return (
+                        <div 
+                          key={s.id} 
+                          className="absolute left-2 right-2 bg-blue-50 border border-blue-200 rounded p-2 text-xs shadow-sm hover:shadow-md transition cursor-pointer"
+                          style={{ top: `${Math.max(0, topOffset)}px` }}
+                        >
+                          <div className="font-semibold text-blue-800">{s.service?.name} - {app.customer?.firstName}</div>
+                          <div className="text-blue-600">
+                            {new Date(s.startTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} - 
+                            {new Date(s.endTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                          </div>
+                        </div>
+                      );
+                    })
+                  ))}
                 </div>
-              )}
-              
-              {data?.appointments?.map(app => (
-                app.services?.map(s => {
-                  const startHour = new Date(s.startTime).getHours();
-                  const startMin = new Date(s.startTime).getMinutes();
-                  // 9 AM is our top (0px). Each hour is 80px (h-20 = 5rem = 80px).
-                  const topOffset = ((startHour - 9) * 80) + ((startMin / 60) * 80);
-                  
-                  return (
-                    <div 
-                      key={s.id} 
-                      className="absolute left-2 right-2 bg-blue-50 border border-blue-200 rounded p-2 text-xs shadow-sm hover:shadow-md transition cursor-pointer"
-                      style={{ top: `${Math.max(0, topOffset)}px` }}
-                    >
-                      <div className="font-semibold text-blue-800">{s.service?.name} - {app.customer?.firstName}</div>
-                      <div className="text-blue-600">
-                        {new Date(s.startTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} - 
-                        {new Date(s.endTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                      </div>
-                    </div>
-                  );
-                })
-              ))}
-            </div>
-            
-            {/* Column 2 */}
-            <div className="relative"></div>
-            
-            {/* Column 3 */}
-            <div className="relative"></div>
+              );
+            })}
             
           </div>
         </div>
