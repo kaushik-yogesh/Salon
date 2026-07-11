@@ -84,7 +84,19 @@ export const getAppointments = async (req, res, next) => {
 export const createBooking = async (req, res, next) => {
   try {
     const userId = req.user.id;
-    const { tenantId, branchId, date, services, notes } = req.body;
+    let { tenantId, branchId, date, services, notes } = req.body;
+
+    if (!branchId && tenantId) {
+      const firstBranch = await prisma.branch.findFirst({ where: { tenantId } });
+      if (firstBranch) {
+        branchId = firstBranch.id;
+      } else {
+        const newBranch = await prisma.branch.create({
+          data: { tenantId, name: 'Main Branch' }
+        });
+        branchId = newBranch.id;
+      }
+    }
 
     if (!tenantId || !branchId || !date || !services || services.length === 0) {
       throw new AppError('Missing required booking details', 400);
