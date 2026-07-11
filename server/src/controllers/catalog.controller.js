@@ -37,8 +37,9 @@ export const createService = async (req, res, next) => {
 
     const service = await prisma.service.upsert({
       where: {
-        tenantId_name: {
+        tenantId_categoryId_name: {
           tenantId,
+          categoryId,
           name
         }
       },
