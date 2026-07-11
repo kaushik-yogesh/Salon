@@ -1,7 +1,19 @@
+import bcrypt from 'bcryptjs';
 import { prisma } from '../utils/db.js';
 import { sendSuccess } from '../utils/response.util.js';
 import { NotFoundError } from '../utils/errors.util.js';
 import { logActivity } from '../utils/logger.js';
+
+// Helper to find or create a global role by name
+const findOrCreateGlobalRole = async (name, priority, description) => {
+  let role = await prisma.role.findFirst({ where: { name, tenantId: null } });
+  if (!role) {
+    role = await prisma.role.create({
+      data: { name, priority, description }
+    });
+  }
+  return role;
+};
 
 export const getWorkers = async (req, res, next) => {
   try {
@@ -26,24 +38,51 @@ export const getWorkers = async (req, res, next) => {
 export const createWorkerProfile = async (req, res, next) => {
   try {
     const tenantId = req.tenant.id;
-    const { email, title, bio, baseCommissionRate, schedules, services } = req.body;
+    const { email, firstName, lastName, password, role, title, bio, baseCommissionRate, schedules, services } = req.body;
 
     let user = await prisma.user.findUnique({
       where: { email }
     });
 
+    let passwordHash = null;
+    if (password) {
+      passwordHash = await bcrypt.hash(password, 10);
+    }
+
     if (!user) {
-      // Auto-create stub user for the worker to claim later
+      // Create user with password and profile
       user = await prisma.user.create({
         data: {
           email,
+          tenantId, // Ensure they are scoped to this tenant
+          passwordHash,
           profile: {
             create: {
-              firstName: 'New',
-              lastName: 'Worker'
+              firstName: firstName || 'New',
+              lastName: lastName || 'Staff'
             }
           }
         }
+      });
+    } else if (passwordHash && !user.passwordHash) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { passwordHash, tenantId }
+      });
+    }
+
+    // Assign the proper Role
+    const roleName = role === 'RECEPTIONIST' ? 'RECEPTIONIST' : 'WORKER';
+    const roleObj = await findOrCreateGlobalRole(roleName, 5, `Salon ${roleName}`);
+    
+    // Check if role already assigned
+    const existingUserRole = await prisma.userRole.findUnique({
+      where: { userId_roleId: { userId: user.id, roleId: roleObj.id } }
+    });
+    
+    if (!existingUserRole) {
+      await prisma.userRole.create({
+        data: { userId: user.id, roleId: roleObj.id }
       });
     }
 

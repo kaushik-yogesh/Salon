@@ -174,30 +174,55 @@ const HRPage = () => {
 
       {isAddWorkerOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
-            <h3 className="text-lg font-bold mb-4">Add Worker Profile</h3>
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-bold mb-4">Add Staff Member</h3>
             <form onSubmit={(e) => {
               e.preventDefault();
               const formData = new FormData(e.target);
               createWorker.mutate({
+                firstName: formData.get('firstName'),
+                lastName: formData.get('lastName'),
                 email: formData.get('email'),
+                password: formData.get('password'),
+                role: formData.get('role'),
                 title: formData.get('title'),
                 bio: formData.get('bio'),
-                baseCommissionRate: parseFloat(formData.get('commission')) / 100
+                baseCommissionRate: parseFloat(formData.get('commission') || 0) / 100
               });
             }}>
               <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">First Name</label>
+                    <input name="firstName" type="text" required className="mt-1 block w-full border border-gray-300 rounded-md p-2" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Last Name</label>
+                    <input name="lastName" type="text" required className="mt-1 block w-full border border-gray-300 rounded-md p-2" />
+                  </div>
+                </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Worker Email Address</label>
+                  <label className="block text-sm font-medium text-gray-700">Email Address</label>
                   <input name="email" type="email" required className="mt-1 block w-full border border-gray-300 rounded-md p-2" />
                 </div>
                 <div>
+                  <label className="block text-sm font-medium text-gray-700">Initial Password</label>
+                  <input name="password" type="text" required className="mt-1 block w-full border border-gray-300 rounded-md p-2" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">System Role</label>
+                  <select name="role" required className="mt-1 block w-full border border-gray-300 rounded-md p-2">
+                    <option value="WORKER">Worker (Stylist/Barber)</option>
+                    <option value="RECEPTIONIST">Receptionist (Front Desk)</option>
+                  </select>
+                </div>
+                <div>
                   <label className="block text-sm font-medium text-gray-700">Job Title</label>
-                  <input name="title" type="text" required className="mt-1 block w-full border border-gray-300 rounded-md p-2" />
+                  <input name="title" type="text" className="mt-1 block w-full border border-gray-300 rounded-md p-2 placeholder-gray-400" placeholder="e.g. Senior Stylist" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Commission Rate (%)</label>
-                  <input name="commission" type="number" min="0" max="100" required className="mt-1 block w-full border border-gray-300 rounded-md p-2" />
+                  <input name="commission" type="number" min="0" max="100" defaultValue="0" className="mt-1 block w-full border border-gray-300 rounded-md p-2" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Bio</label>
