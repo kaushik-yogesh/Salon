@@ -128,20 +128,30 @@ const ClientBookingPage = () => {
               <h2 className="text-xl font-bold text-gray-900 mb-4">Step 2: Date & Time</h2>
               <input 
                 type="date" 
+                min={new Date().toISOString().split('T')[0]}
                 value={bookingData.date}
                 onChange={e => setBookingData(d => ({ ...d, date: e.target.value }))}
                 className="w-full border-2 border-gray-200 rounded-lg p-3 focus:outline-none focus:border-pink-500 mb-4"
               />
               <div className="grid grid-cols-3 gap-3">
-                {['09:00', '10:00', '11:00', '13:00', '14:00', '15:00'].map(time => (
-                  <button 
-                    key={time}
-                    onClick={() => { setBookingData(d => ({ ...d, startTime: time })); handleNext(); }}
-                    className={`py-2 border-2 rounded-lg font-medium transition ${bookingData.startTime === time ? 'border-pink-500 bg-pink-50 text-pink-700' : 'border-gray-200 text-gray-600 hover:border-pink-300'}`}
-                  >
-                    {time}
-                  </button>
-                ))}
+                {['09:00', '10:00', '11:00', '13:00', '14:00', '15:00'].map(time => {
+                  const isToday = bookingData.date === new Date().toISOString().split('T')[0];
+                  const [hours, minutes] = time.split(':').map(Number);
+                  const slotTime = new Date();
+                  slotTime.setHours(hours, minutes, 0, 0);
+                  const isPast = isToday && slotTime < new Date();
+                  
+                  return (
+                    <button 
+                      key={time}
+                      disabled={isPast}
+                      onClick={() => { setBookingData(d => ({ ...d, startTime: time })); handleNext(); }}
+                      className={`py-2 border-2 rounded-lg font-medium transition ${bookingData.startTime === time ? 'border-pink-500 bg-pink-50 text-pink-700' : 'border-gray-200 text-gray-600 hover:border-pink-300'} ${isPast ? 'opacity-50 cursor-not-allowed bg-gray-100' : ''}`}
+                    >
+                      {time}
+                    </button>
+                  );
+                })}
               </div>
               <div className="mt-4">
                  <h3 className="font-bold text-sm text-gray-700 mb-2">Select Provider (Optional)</h3>

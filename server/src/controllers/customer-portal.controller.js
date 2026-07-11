@@ -125,10 +125,12 @@ export const createBooking = async (req, res, next) => {
     let totalPrice = 0;
     let totalDuration = 0;
     
-    // Simplistic scheduling for now: stack services consecutively starting at 10 AM (for MVP)
-    // In reality, this requires full slot calculation
     let currentStartTime = new Date(date);
-    currentStartTime.setHours(10, 0, 0, 0); // Temporary placeholder logic for MVP
+    
+    // Prevent booking in the past
+    if (currentStartTime < new Date()) {
+      throw new AppError('Cannot book an appointment in the past', 400);
+    }
 
     const appointmentServicesData = await Promise.all(services.map(async (svc) => {
       const serviceData = await prisma.service.findUnique({ where: { id: svc.serviceId } });

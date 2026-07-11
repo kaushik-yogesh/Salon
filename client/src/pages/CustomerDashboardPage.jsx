@@ -7,7 +7,7 @@ import api from '../api/axios';
 const CustomerDashboardPage = () => {
   const { user } = useAuthStore();
 
-  const { data: dashboardData, isLoading } = useQuery({
+  const { data: dashboardData, isLoading, refetch } = useQuery({
     queryKey: ['customer-dashboard'],
     queryFn: async () => {
       const res = await api.get('/customer-portal/dashboard');
@@ -58,8 +58,23 @@ const CustomerDashboardPage = () => {
                     </div>
                   </div>
                   <div className="mt-4 sm:mt-0 flex gap-2">
-                    <button className="text-sm font-medium text-gray-600 hover:text-gray-900 bg-gray-100 px-4 py-2 rounded-lg">Reschedule</button>
-                    <button className="text-sm font-medium text-red-600 hover:text-red-800 bg-red-50 px-4 py-2 rounded-lg">Cancel</button>
+                    {app.status !== 'CANCELLED' && app.status !== 'COMPLETED' && (
+                      <button 
+                        onClick={async () => {
+                          if (window.confirm('Are you sure you want to cancel this appointment?')) {
+                            try {
+                              await api.post(`/customer-portal/bookings/${app.id}/cancel`);
+                              refetch();
+                            } catch (err) {
+                              alert(err.response?.data?.error?.message || 'Failed to cancel appointment');
+                            }
+                          }
+                        }}
+                        className="text-sm font-medium text-red-600 hover:text-red-800 bg-red-50 px-4 py-2 rounded-lg"
+                      >
+                        Cancel
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
