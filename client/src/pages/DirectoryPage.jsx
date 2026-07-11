@@ -4,17 +4,17 @@ import api from '../api/axios';
 import { Link } from 'react-router-dom';
 
 const DirectoryPage = () => {
-  const [search, setSearch] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
 
   const { data } = useQuery({
-    queryKey: ['public-salons'],
+    queryKey: ['directory-salons'],
     queryFn: async () => {
-      const res = await api.get('/public/salons');
+      const res = await api.get('/directory/salons');
       return res.data;
     }
   });
 
-  const salons = data?.data || [];
+  const salons = data?.data?.salons || [];
 
   return (
     <div className="bg-slate-50 min-h-screen py-12">
@@ -42,7 +42,7 @@ const DirectoryPage = () => {
         </div>
 
         <div className="grid md:grid-cols-3 gap-8">
-          {salons?.map(salon => (
+          {salons?.filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase())).map(salon => (
             <div key={salon.id} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition">
               <div className="h-48 bg-gray-200 bg-gradient-to-br from-indigo-100 to-rose-100 flex items-center justify-center">
                 <span className="text-4xl">✂️</span>
@@ -51,10 +51,10 @@ const DirectoryPage = () => {
                 <div className="flex justify-between items-start mb-2">
                   <h3 className="text-xl font-bold text-gray-900">{salon.name}</h3>
                   <span className="bg-yellow-100 text-yellow-800 text-xs font-bold px-2 py-1 rounded flex items-center">
-                    ★ {salon.rating}
+                    ★ 5.0
                   </span>
                 </div>
-                <p className="text-sm text-gray-500 mb-4">{salon.type} • {salon.location}</p>
+                <p className="text-sm text-gray-500 mb-4">{salon.branches?.[0]?.address || 'Multiple Locations'}</p>
                 <Link to={`/book/${salon.id}`} className="block w-full text-center bg-indigo-50 text-indigo-700 font-bold py-2 rounded hover:bg-indigo-100 transition">
                   Book Now
                 </Link>

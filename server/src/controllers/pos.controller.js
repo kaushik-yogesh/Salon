@@ -62,6 +62,21 @@ export const processPayment = async (req, res, next) => {
     const invoice = await prisma.invoice.findUnique({ where: { id: invoiceId, tenantId } });
     if (!invoice) throw new NotFoundError('Invoice not found');
 
+    if (method === 'WALLET') {
+      if (!invoice.customerId) {
+        throw new AppError('Cannot pay via Wallet for a walk-in customer without a profile', 400);
+      }
+      const customer = await prisma.customer.findUnique({ where: { id: invoice.customerId } });
+      if (!customer || customer.walletBalance < amount) {
+        throw new AppError('Insufficient wallet balance', 400);
+      }
+      // Deduct from wallet
+      await prisma.customer.update({
+        where: { id: customer.id },
+        data: { walletBalance: { decrement: amount } }
+      });
+    }
+
     // Create the payment record
     const payment = await prisma.payment.create({
       data: { invoiceId, amount, method, transactionId: req.body.transactionId }
@@ -145,9 +160,17 @@ export const refundPayment = async (req, res, next) => {
     }
     if (payment.status === 'REFUNDED') throw new AppError('Payment already refunded', 400);
 
-    // If it's a digital payment, trigger gateway refund
     if (['STRIPE', 'RAZORPAY'].includes(payment.method) && payment.transactionId) {
       await processGatewayRefund(payment.method, payment.transactionId, amount || payment.amount);
+    } else if (payment.method === 'WALLET') {
+      const invoiceCustomer = payment.invoice.customerId;
+      if (invoiceCustomer) {
+        const refundAmount = amount || payment.amount;
+        await prisma.customer.update({
+          where: { id: invoiceCustomer },
+          data: { walletBalance: { increment: refundAmount } }
+        });
+      }
     }
 
     const newStatus = (amount && amount < payment.amount) ? 'COMPLETED' : 'REFUNDED'; // Simplified for partial refunds

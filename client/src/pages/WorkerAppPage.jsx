@@ -34,8 +34,24 @@ const WorkerAppPage = () => {
     }
   });
 
+  const { data: activeExecution, isLoading: activeLoading } = useQuery({
+    queryKey: ['active-execution'],
+    queryFn: async () => {
+      const res = await api.get('/execution/active');
+      return res.data.data;
+    }
+  });
+
   useEffect(() => {
-    if (!activeAppointment && !isLoading) {
+    if (activeExecution && !activeAppointment) {
+      setActiveAppointment(activeExecution);
+      setActiveAppointmentId(activeExecution.id);
+      setActiveStatus(activeExecution.status);
+    }
+  }, [activeExecution, activeAppointment]);
+
+  useEffect(() => {
+    if (!activeAppointment && !isLoading && !activeLoading && !activeExecution) {
       const scanner = new Html5QrcodeScanner(
         'qr-reader',
         { 
@@ -82,7 +98,7 @@ const WorkerAppPage = () => {
         scanner.clear().catch(e => console.log('Scanner clear error', e));
       };
     }
-  }, [activeAppointment, isLoading, isScanningStatus]);
+  }, [activeAppointment, isLoading, isScanningStatus, activeLoading, activeExecution]);
 
   const handleAction = async (action) => {
     if (!activeAppointmentId) return;

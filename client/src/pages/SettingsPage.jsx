@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Bell, ShieldCheck, Send } from 'lucide-react';
+import { usePushNotifications } from '../hooks/usePushNotifications';
 import api from '../api/axios';
 
 const SettingsPage = () => {
@@ -7,6 +9,9 @@ const SettingsPage = () => {
   const [isEditTenantOpen, setIsEditTenantOpen] = useState(false);
   const [isBranchModalOpen, setIsBranchModalOpen] = useState(false);
   const [editingBranch, setEditingBranch] = useState(null);
+  
+  const { isSubscribed, error: pushError, requestPermissionAndSubscribe } = usePushNotifications();
+  const [testPushStatus, setTestPushStatus] = useState(null);
 
   const { data: meData } = useQuery({
     queryKey: ['me'],
@@ -55,6 +60,19 @@ const SettingsPage = () => {
       setEditingBranch(null);
     }
   });
+
+  const sendTestPush = async () => {
+    setTestPushStatus('sending');
+    try {
+      await api.post('/push/test');
+      setTestPushStatus('success');
+      setTimeout(() => setTestPushStatus(null), 3000);
+    } catch (err) {
+      console.error(err);
+      setTestPushStatus('error');
+      setTimeout(() => setTestPushStatus(null), 3000);
+    }
+  };
 
   if (tenantLoading || branchLoading || !tenantId) return <div className="p-8 text-center text-secondary">Loading settings...</div>;
 
@@ -141,6 +159,55 @@ const SettingsPage = () => {
               </tbody>
             </table>
           </div>
+        )}
+      </div>
+
+      <div className="bg-surface p-6 rounded-2xl shadow-sm border border-gray-100">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="bg-indigo-100 p-2 rounded-lg text-indigo-600">
+            <Bell className="w-6 h-6" />
+          </div>
+          <h2 className="text-xl font-bold text-secondary">Notifications & Alerts</h2>
+        </div>
+        
+        <p className="text-gray-500 text-sm mb-6 max-w-2xl">
+          Enable browser push notifications to receive real-time alerts for new bookings, cancellations, and staff updates directly on your device.
+        </p>
+
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+          {isSubscribed ? (
+            <div className="flex items-center gap-2 text-emerald-600 bg-emerald-50 px-4 py-2 rounded-lg border border-emerald-100 font-medium text-sm">
+              <ShieldCheck className="w-5 h-5" />
+              Notifications Enabled
+            </div>
+          ) : (
+            <button 
+              onClick={requestPermissionAndSubscribe}
+              className="bg-indigo-600 text-white px-5 py-2.5 rounded-lg shadow-sm hover:bg-indigo-700 transition font-medium text-sm flex items-center gap-2"
+            >
+              <Bell className="w-4 h-4" />
+              Enable Browser Notifications
+            </button>
+          )}
+
+          {isSubscribed && (
+            <button 
+              onClick={sendTestPush}
+              disabled={testPushStatus === 'sending'}
+              className="bg-white border border-gray-300 text-gray-700 px-5 py-2.5 rounded-lg shadow-sm hover:bg-gray-50 transition font-medium text-sm flex items-center gap-2 disabled:opacity-50"
+            >
+              <Send className="w-4 h-4" />
+              {testPushStatus === 'sending' ? 'Sending...' : 
+               testPushStatus === 'success' ? 'Sent!' : 
+               testPushStatus === 'error' ? 'Failed' : 'Send Test Push'}
+            </button>
+          )}
+        </div>
+        
+        {pushError && (
+          <p className="mt-4 text-sm text-red-500 font-medium bg-red-50 p-3 rounded-lg border border-red-100">
+            {pushError.message || 'Failed to enable notifications. Please check your browser permissions.'}
+          </p>
         )}
       </div>
 

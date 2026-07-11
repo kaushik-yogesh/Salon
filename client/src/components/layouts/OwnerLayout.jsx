@@ -10,6 +10,7 @@ const OwnerLayout = () => {
     { path: '/owner', label: 'Dashboard', icon: '📊' },
     { path: '/owner/bookings', label: 'Calendar', icon: '📅' },
     { path: '/owner/pos', label: 'POS / Till', icon: '💳' },
+    { path: '/owner/invoices', label: 'Invoices', icon: '🧾' },
     { path: '/owner/customers', label: 'Customers', icon: '👥' },
     { path: '/owner/hr', label: 'Staff (HR)', icon: '🧑‍💼' },
     { path: '/owner/catalog', label: 'Catalog', icon: '✂️' },

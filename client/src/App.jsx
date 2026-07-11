@@ -9,6 +9,7 @@ import ReceptionLayout from './components/layouts/ReceptionLayout';
 import WorkerLayout from './components/layouts/WorkerLayout';
 import CustomerLayout from './components/layouts/CustomerLayout';
 import ProtectedRoute from './components/ProtectedRoute';
+import ErrorBoundary from './components/ErrorBoundary';
 
 // Lazy load Pages
 const LoginPage = lazy(() => import('./pages/LoginPage'));
@@ -63,11 +64,12 @@ const LoadingFallback = () => (
 
 function App() {
   return (
-    <Router>
-      <Suspense fallback={<LoadingFallback />}>
-      <Routes>
-        {/* ============================== */}
-        {/* PUBLIC ROUTES                  */}
+    <ErrorBoundary>
+      <Router>
+        <Suspense fallback={<LoadingFallback />}>
+        <Routes>
+          {/* ============================== */}
+          {/* PUBLIC ROUTES                  */}
         {/* ============================== */}
         <Route element={<PublicLayout />}>
           <Route path="/" element={<LandingPage />} />
@@ -109,6 +111,7 @@ function App() {
             <Route index element={<DashboardPage />} />
             <Route path="bookings" element={<BookingsPage />} />
             <Route path="pos" element={<POSPage />} />
+            <Route path="invoices" element={<InvoiceHistoryPage />} />
             <Route path="customers" element={<CustomersPage />} />
             <Route path="hr" element={<HRPage />} />
             <Route path="catalog" element={<CatalogPage />} />
@@ -167,8 +170,9 @@ function App() {
         {/* 404 Catch All */}
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
-      </Suspense>
-    </Router>
+        </Suspense>
+      </Router>
+    </ErrorBoundary>
   );
 }
 

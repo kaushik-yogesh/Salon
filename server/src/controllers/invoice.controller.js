@@ -15,6 +15,8 @@ export const getAllInvoices = async (req, res, next) => {
       take: Number(limit),
       include: {
         lineItems: true,
+        payments: true,
+        customer: true,
         branch: { select: { name: true } }
       }
     });

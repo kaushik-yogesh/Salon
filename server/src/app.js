@@ -30,7 +30,7 @@ app.use('/api', limiter);
 
 // Production CORS Configuration
 const allowedOrigins = process.env.NODE_ENV === 'production' 
-  ? ['https://your-production-domain.com', 'https://www.your-production-domain.com'] 
+  ? [process.env.FRONTEND_URL, 'https://salon-e5v9.onrender.com'].filter(Boolean)
   : ['http://localhost:5173', 'http://127.0.0.1:5173'];
 
 app.use(cors({
@@ -86,7 +86,6 @@ try {
   console.warn('Swagger docs could not be loaded:', error.message);
 }
 
-// Routes
 import authRoutes from './routes/auth.routes.js';
 import tenantRoutes from './routes/tenant.routes.js';
 import branchRoutes from './routes/branch.routes.js';
@@ -110,6 +109,8 @@ import payrollRoutes from './routes/payroll.routes.js';
 import invoiceRoutes from './routes/invoice.routes.js';
 import pushRoutes from './routes/push.routes.js';
 import demoRoutes from './routes/demo.routes.js';
+import directoryRoutes from './routes/directory.routes.js';
+import customerPortalRoutes from './routes/customer-portal.routes.js';
 
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/execution', executionRoutes);
@@ -134,6 +135,8 @@ app.use('/api/v1/reports', reportsRoutes);
 app.use('/api/v1/customers', customerRoutes);
 app.use('/api/v1/push', pushRoutes);
 app.use('/api/v1/demo', demoRoutes);
+app.use('/api/v1/directory', directoryRoutes);
+app.use('/api/v1/customer-portal', customerPortalRoutes);
 
 // Global Error Handler
 app.use((err, req, res, _next) => {

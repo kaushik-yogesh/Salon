@@ -22,6 +22,21 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
+    // 1. Network Errors (No Response)
+    if (error.code === 'ERR_NETWORK') {
+      console.error('Network error detected. The server might be down or you are offline.');
+      alert('Network Error: Please check your internet connection and try again.');
+      return Promise.reject(error);
+    }
+
+    // 2. Server Crash (500s)
+    if (error.response?.status >= 500) {
+      console.error('Internal Server Error', error.response.data);
+      alert('Server Error: Something went wrong on our end. Please try again later.');
+      return Promise.reject(error);
+    }
+
+    // 3. Auth Refresh Logic (401s)
     if (error.response?.status === 401 && error.config && !error.config._retry) {
       error.config._retry = true;
       try {
@@ -39,6 +54,7 @@ api.interceptors.response.use(
         return Promise.reject(refreshError);
       }
     }
+    
     return Promise.reject(error);
   }
 );

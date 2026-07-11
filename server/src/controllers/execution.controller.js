@@ -239,3 +239,46 @@ export const completeService = async (req, res, next) => {
     next(error);
   }
 };
+
+export const getActiveExecution = async (req, res, next) => {
+  try {
+    const tenantId = req.user.tenantId;
+
+    const workerProfile = await prisma.workerProfile.findUnique({
+      where: { userId: req.user.id }
+    });
+
+    if (!workerProfile) {
+      return sendSuccess(res, null); // Not a worker
+    }
+
+    // Find any appointment service that is assigned to this worker and is not completed/cancelled
+    const activeService = await prisma.appointmentService.findFirst({
+      where: {
+        workerProfileId: workerProfile.id,
+        status: {
+          in: ['PENDING', 'IN_PROGRESS']
+        }
+      },
+      include: {
+        appointment: {
+          include: {
+            customer: true,
+            services: {
+              include: { service: true }
+            }
+          }
+        }
+      }
+    });
+
+    if (!activeService) {
+      return sendSuccess(res, null);
+    }
+
+    // Return the active appointment
+    sendSuccess(res, activeService.appointment);
+  } catch (error) {
+    next(error);
+  }
+};

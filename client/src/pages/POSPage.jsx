@@ -57,16 +57,25 @@ const POSPage = () => {
   const handleDirectPayment = async (method) => {
     try {
       setIsProcessing(true);
-      await api.post('/pos/payments', {
+      const res = await api.post('/pos/payments', {
         invoiceId: activeInvoice.id,
         amount: parseFloat(paymentAmount),
         method: method
       });
       alert(`Payment via ${method} recorded successfully!`);
-      setActiveInvoice(null);
-      setSelectedAppointmentId(null);
-      setClientSecret(null);
-      refetch();
+      
+      const { isFullyPaid, totalPaid } = res.data.data;
+      if (isFullyPaid) {
+        setActiveInvoice(null);
+        setSelectedAppointmentId(null);
+        setClientSecret(null);
+        refetch();
+      } else {
+        // Partial payment case: keep terminal open, update remaining balance
+        const remaining = activeInvoice.grandTotal - totalPaid;
+        setPaymentAmount(remaining > 0 ? remaining.toFixed(2) : '0');
+        // Optionally fetch updated invoice here if needed
+      }
     } catch (err) {
       alert(err.response?.data?.error?.message || `Failed to process ${method} payment`);
     } finally {
@@ -116,10 +125,14 @@ const POSPage = () => {
         order_id: data.orderId, // Should come from backend if configured properly
         handler: function (response) {
             alert('Razorpay Payment successful! ID: ' + response.razorpay_payment_id);
-            // In a real flow, we'd hit a webhook/callback endpoint, but we simulate success here.
+            // After Razorpay is successful, the webhook processes it. We can optionally wait or verify it manually here by checking the invoice status.
             setActiveInvoice(null);
             setSelectedAppointmentId(null);
             refetch();
+        },
+        notes: {
+            invoiceId: activeInvoice.id,
+            tenantId: activeInvoice.tenantId
         },
         prefill: {
             name: activeInvoice.appointment?.customer?.firstName || "Customer",
