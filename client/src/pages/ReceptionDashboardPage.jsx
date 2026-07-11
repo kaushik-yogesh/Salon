@@ -31,7 +31,7 @@ const ReceptionDashboardPage = () => {
   const { data: workers } = useQuery({
     queryKey: ['workers'],
     queryFn: async () => {
-      const res = await api.get('/hr/workers');
+      const res = await api.get('/hr');
       return res.data?.data;
     }
   });

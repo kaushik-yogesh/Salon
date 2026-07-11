@@ -170,7 +170,7 @@ const SetupWizardPage = () => {
     setError("");
     try {
       for (const w of validWorkers) {
-        await api.post("/hr/workers", {
+        await api.post("/hr", {
           firstName: w.firstName.trim(),
           lastName: w.lastName.trim(),
           email: w.email.trim(),
