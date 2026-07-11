@@ -48,7 +48,7 @@ export const getSalonCatalog = async (req, res, next) => {
     
     // Fetch workers for this tenant to choose from
     const workers = await prisma.workerProfile.findMany({
-      where: { user: { tenantId }, status: 'ACTIVE' },
+      where: { user: { tenantId }, isActive: true },
       include: {
         user: {
           include: { profile: true }
