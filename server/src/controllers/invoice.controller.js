@@ -16,12 +16,40 @@ export const getAllInvoices = async (req, res, next) => {
       include: {
         lineItems: true,
         payments: true,
-        customer: true,
         branch: { select: { name: true } }
       }
     });
 
-    sendSuccess(res, invoices);
+    // Manually fetch appointments and customers since relations are missing in Invoice schema
+    const appointmentIds = invoices.map(i => i.appointmentId).filter(Boolean);
+    const appointments = await prisma.appointment.findMany({
+      where: { id: { in: appointmentIds } }
+    });
+
+    const customerIds = [...new Set([
+      ...invoices.map(i => i.customerId),
+      ...appointments.map(a => a.customerId)
+    ])].filter(Boolean);
+
+    const customers = await prisma.customer.findMany({
+      where: { id: { in: customerIds } }
+    });
+
+    const enrichedInvoices = invoices.map(inv => {
+      let appt = null;
+      if (inv.appointmentId) {
+        const baseAppt = appointments.find(a => a.id === inv.appointmentId);
+        if (baseAppt) {
+          appt = {
+            ...baseAppt,
+            customer: customers.find(c => c.id === baseAppt.customerId) || null
+          };
+        }
+      }
+      return { ...inv, appointment: appt };
+    });
+
+    sendSuccess(res, enrichedInvoices);
   } catch (error) {
     next(error);
   }
