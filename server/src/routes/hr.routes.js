@@ -1,7 +1,12 @@
 import express from 'express';
 import { 
   getWorkers, createWorkerProfile, updateWorkerProfile, deleteWorkerProfile, 
-  updateWorkerSchedule, requestTimeOff, updateTimeOffStatus, getTimeOffRequests 
+  updateWorkerSchedule, requestTimeOff, updateTimeOffStatus, getTimeOffRequests,
+  getShifts,
+  saveShifts,
+  clockInOut,
+  getWorkerDocuments,
+  addWorkerDocument
 } from '../controllers/hr.controller.js';
 import { requireAuth, requireTenantContext } from '../middlewares/auth.middleware.js';
 import { requirePermission } from '../middlewares/rbac.middleware.js';
@@ -27,5 +32,12 @@ router.put('/:id/schedules', requirePermission('HR', 'UPDATE'), validate(updateS
 router.get('/:id/time-off', requireAuth, getTimeOffRequests);
 router.post('/:id/time-off', requirePermission('HR', 'UPDATE'), validate(timeOffRequestSchema), requestTimeOff);
 router.put('/time-off/:requestId/status', requirePermission('HR', 'UPDATE'), validate(timeOffStatusSchema), updateTimeOffStatus);
+
+router.get('/shifts', requirePermission('HR', 'READ'), getShifts);
+router.post('/shifts', requirePermission('HR', 'UPDATE'), saveShifts);
+router.post('/attendance/clock', requirePermission('HR', 'UPDATE'), clockInOut);
+
+router.get('/workers/:id/documents', requirePermission('HR', 'READ'), getWorkerDocuments);
+router.post('/workers/:id/documents', requirePermission('HR', 'UPDATE'), addWorkerDocument);
 
 export default router;

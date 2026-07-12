@@ -263,6 +263,36 @@ export const getWallets = async (req, res, next) => {
   }
 };
 
+export const topUpWallet = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const { tenantId } = req.params;
+    const { amount } = req.body;
+
+    if (!amount || amount <= 0) {
+      throw new AppError('Top-up amount must be greater than zero', 400);
+    }
+
+    const customer = await prisma.customer.findFirst({
+      where: { userId, tenantId }
+    });
+
+    if (!customer) throw new NotFoundError('Customer not found for this tenant');
+
+    // In a real production scenario, you would verify payment intent from Stripe here before crediting.
+    // For MVP, we will mock the successful payment and just credit the wallet.
+    
+    const updatedCustomer = await prisma.customer.update({
+      where: { id: customer.id },
+      data: { walletBalance: { increment: amount } }
+    });
+
+    sendSuccess(res, { message: 'Wallet topped up successfully', newBalance: updatedCustomer.walletBalance });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const updateProfile = async (req, res, next) => {
   try {
     const userId = req.user.id;

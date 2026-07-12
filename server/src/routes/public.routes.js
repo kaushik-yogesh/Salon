@@ -1,14 +1,16 @@
 import express from 'express';
-import { getPublicSalons, getPublicCatalog, getPublicWorkers, createGuestBooking } from '../controllers/public.controller.js';
+import { 
+  getTenantProfile, 
+  getTenantCatalog, 
+  getTenantStaff, 
+  createPublicBooking 
+} from '../controllers/public.controller.js';
 
 const router = express.Router();
 
-// No Auth or Tenant Middlewares here - these are public B2C routes
-// Tenant ID is passed via URL params
-
-router.get('/salons', getPublicSalons);
-router.get('/:tenantId/catalog', getPublicCatalog);
-router.get('/:tenantId/workers', getPublicWorkers);
-router.post('/:tenantId/book', createGuestBooking);
+router.get('/tenant/:tenantId', getTenantProfile);
+router.get('/tenant/:tenantId/catalog', getTenantCatalog);
+router.get('/tenant/:tenantId/staff', getTenantStaff);
+router.post('/tenant/:tenantId/bookings', createPublicBooking);
 
 export default router;

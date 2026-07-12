@@ -22,6 +22,12 @@ const POSPage = () => {
   const [selectedAppointmentId, setSelectedAppointmentId] = useState(null);
   const [activeInvoice, setActiveInvoice] = useState(null);
   
+  // Retail Walk-in States
+  const [isWalkIn, setIsWalkIn] = useState(false);
+  const [cart, setCart] = useState([]); // Array of { product, quantity }
+  const [searchQuery, setSearchQuery] = useState('');
+  const [discountAmount, setDiscountAmount] = useState('0');
+
   // Payment states
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('CASH'); // CASH, STRIPE, RAZORPAY, UPI, WALLET
@@ -37,12 +43,48 @@ const POSPage = () => {
     }
   });
 
+  const { data: inventoryData } = useQuery({
+    queryKey: ['inventory'],
+    queryFn: async () => {
+      const res = await api.get('/inventory');
+      return res.data;
+    }
+  });
+
+  const products = inventoryData?.data || [];
+  const defaultBranchId = products.length > 0 ? products[0].branchId : 'c031c19b-c49b-4497-a790-281b3d5b00c6';
+
+  const addToCart = (product) => {
+    setCart(prev => {
+      const existing = prev.find(item => item.product.id === product.id);
+      if (existing) {
+        return prev.map(item => item.product.id === product.id ? { ...item, quantity: item.quantity + 1 } : item);
+      }
+      return [...prev, { product, quantity: 1 }];
+    });
+  };
+
+  const removeFromCart = (productId) => {
+    setCart(prev => prev.filter(item => item.product.id !== productId));
+  };
+
   const handleStartCheckout = async () => {
     try {
       setIsProcessing(true);
-      const res = await api.post('/pos/checkout/start', {
-        appointmentId: selectedAppointmentId
-      });
+      let payload = {};
+      if (isWalkIn) {
+        payload = {
+          branchId: defaultBranchId,
+          additionalProducts: cart.map(item => ({ productId: item.product.id, quantity: item.quantity })),
+          discountTotal: parseFloat(discountAmount) || 0
+        };
+      } else {
+        payload = { 
+          appointmentId: selectedAppointmentId,
+          discountTotal: parseFloat(discountAmount) || 0 
+        };
+      }
+      const res = await api.post('/pos/checkout/start', payload);
       setActiveInvoice(res.data.data);
       // Determine remaining amount based on invoice data if partials existed, otherwise grandTotal
       const amountDue = res.data.data.grandTotal || 0;
@@ -54,13 +96,14 @@ const POSPage = () => {
     }
   };
 
-  const handleDirectPayment = async (method) => {
+  const handleDirectPayment = async (method, extraData = {}) => {
     try {
       setIsProcessing(true);
       const res = await api.post('/pos/payments', {
         invoiceId: activeInvoice.id,
         amount: parseFloat(paymentAmount),
-        method: method
+        method: method,
+        ...extraData
       });
       alert(`Payment via ${method} recorded successfully!`);
       
@@ -68,6 +111,8 @@ const POSPage = () => {
       if (isFullyPaid) {
         setActiveInvoice(null);
         setSelectedAppointmentId(null);
+        setIsWalkIn(false);
+        setCart([]);
         setClientSecret(null);
         refetch();
       } else {
@@ -128,6 +173,8 @@ const POSPage = () => {
             // After Razorpay is successful, the webhook processes it. We can optionally wait or verify it manually here by checking the invoice status.
             setActiveInvoice(null);
             setSelectedAppointmentId(null);
+            setIsWalkIn(false);
+            setCart([]);
             refetch();
         },
         notes: {
@@ -164,7 +211,14 @@ const POSPage = () => {
       case 'CASH':
       case 'UPI':
       case 'WALLET':
-        handleDirectPayment(paymentMethod);
+      case 'GIFT_CARD':
+        const extraData = {};
+        if (paymentMethod === 'GIFT_CARD') {
+          const code = document.getElementById('giftCardCodeInput')?.value;
+          if (!code) return alert('Please enter gift card code');
+          extraData.giftCardCode = code;
+        }
+        handleDirectPayment(paymentMethod, extraData);
         break;
       case 'STRIPE':
         handleStripePayment();
@@ -182,7 +236,36 @@ const POSPage = () => {
     setClientSecret(null);
     setActiveInvoice(null);
     setSelectedAppointmentId(null);
+    setIsWalkIn(false);
+    setCart([]);
     refetch();
+  };
+
+  const [showGiftCardModal, setShowGiftCardModal] = useState(false);
+  const [gcCode, setGcCode] = useState('');
+  const [gcValue, setGcValue] = useState('');
+  const [gcPurchaser, setGcPurchaser] = useState('');
+  const [isCreatingGc, setIsCreatingGc] = useState(false);
+
+  const handleCreateGiftCard = async (e) => {
+    e.preventDefault();
+    setIsCreatingGc(true);
+    try {
+      await api.post('/pos/gift-cards', {
+        code: gcCode,
+        initialValue: gcValue,
+        purchaserName: gcPurchaser
+      });
+      alert('Gift Card issued successfully!');
+      setShowGiftCardModal(false);
+      setGcCode('');
+      setGcValue('');
+      setGcPurchaser('');
+    } catch(err) {
+      alert(err.response?.data?.error?.message || 'Failed to issue gift card');
+    } finally {
+      setIsCreatingGc(false);
+    }
   };
 
   return (
@@ -190,12 +273,41 @@ const POSPage = () => {
       
       {/* Left Panel: Appointments List */}
       <div className="w-full md:w-1/3 bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex flex-col h-full">
-        <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-white/50 backdrop-blur-sm sticky top-0">
-          <h2 className="font-extrabold text-gray-900 text-lg">Today's Queue</h2>
-          <span className="text-[10px] font-bold text-primary bg-primary/10 px-2 py-1 rounded-full uppercase tracking-wider">Active</span>
+        <div className="p-5 border-b border-gray-100 flex flex-col gap-3 bg-white/50 backdrop-blur-sm sticky top-0">
+          <div className="flex justify-between items-center">
+            <h2 className="font-extrabold text-gray-900 text-lg">Today's Queue</h2>
+            <button 
+              onClick={() => setShowGiftCardModal(true)}
+              className="text-xs font-bold text-pink-600 bg-pink-50 hover:bg-pink-100 px-3 py-1.5 rounded-lg transition-colors border border-pink-100"
+            >
+              Sell Gift Card
+            </button>
+          </div>
         </div>
         
         <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50/30">
+          <button
+            onClick={() => {
+              setIsWalkIn(true);
+              setSelectedAppointmentId(null);
+              setActiveInvoice(null);
+              setCart([]);
+              setClientSecret(null);
+              setPaymentMethod('CASH');
+              setDiscountAmount('0');
+            }}
+            className={`w-full p-4 rounded-xl cursor-pointer transition-all border shadow-sm hover:shadow-md text-left ${
+              isWalkIn
+                ? 'border-primary bg-primary/5 ring-1 ring-primary/20' 
+                : 'border-gray-100 bg-white hover:border-gray-300'
+            }`}
+          >
+            <div className="font-bold text-gray-900">Walk-in Retail Sale</div>
+            <div className="text-xs text-gray-500 mt-1">Direct product purchase without appointment</div>
+          </button>
+
+          <div className="border-t border-gray-200 my-4"></div>
+
           {loadingAppointments ? (
             <div className="flex flex-col items-center justify-center h-40 gap-3">
               <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
@@ -207,12 +319,14 @@ const POSPage = () => {
                 key={app.id} 
                 onClick={() => {
                   setSelectedAppointmentId(app.id);
+                  setIsWalkIn(false);
                   setActiveInvoice(null);
                   setClientSecret(null);
                   setPaymentMethod('CASH');
+                  setDiscountAmount('0');
                 }}
                 className={`p-4 rounded-xl cursor-pointer transition-all border shadow-sm hover:shadow-md ${
-                  selectedAppointmentId === app.id 
+                  selectedAppointmentId === app.id && !isWalkIn
                     ? 'border-primary bg-primary/5 ring-1 ring-primary/20' 
                     : 'border-gray-100 bg-white hover:border-gray-300'
                 }`}
@@ -246,7 +360,179 @@ const POSPage = () => {
           <h2 className="font-extrabold text-gray-900 text-lg">Checkout Terminal</h2>
         </div>
 
-        {selectedAppointmentId ? (() => {
+        {isWalkIn ? (() => {
+          const cartTotal = cart.reduce((sum, item) => sum + (item.product.retailPrice * item.quantity), 0);
+          return (
+          <>
+            <div className="flex-1 p-6 overflow-y-auto bg-gray-50/30 flex flex-col md:flex-row gap-6">
+              <div className="w-full md:w-1/2">
+                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Add Products</h3>
+                <input 
+                  type="text" 
+                  placeholder="Search products..." 
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  className="w-full p-2 border border-gray-300 rounded mb-4"
+                />
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {products.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.sku.includes(searchQuery)).map(p => (
+                    <div key={p.id} className="flex justify-between items-center p-3 bg-white border border-gray-200 rounded">
+                      <div>
+                        <div className="font-bold text-sm">{p.name}</div>
+                        <div className="text-xs text-gray-500">Stock: {p.stockQuantity} | ${p.retailPrice}</div>
+                      </div>
+                      <button onClick={() => addToCart(p)} className="bg-primary text-white px-3 py-1 rounded text-xs font-bold hover:bg-opacity-90">Add</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="w-full md:w-1/2">
+                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Cart</h3>
+                <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm min-h-[200px]">
+                  {cart.length === 0 ? <p className="text-gray-400 text-sm text-center">Cart is empty</p> : (
+                    <div className="space-y-4">
+                      {cart.map(item => (
+                        <div key={item.product.id} className="flex justify-between items-center border-b border-gray-50 pb-3 last:border-0 last:pb-0">
+                          <div>
+                            <h4 className="font-bold text-gray-800">{item.product.name}</h4>
+                            <p className="text-[11px] text-gray-500 font-medium">Qty: {item.quantity} x ${item.product.retailPrice}</p>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <div className="font-bold text-gray-900">${(item.quantity * item.product.retailPrice).toFixed(2)}</div>
+                            <button onClick={() => removeFromCart(item.product.id)} className="text-red-500 font-bold text-xs">Remove</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white border-t border-gray-100 p-6 shadow-[0_-4px_20px_-10px_rgba(0,0,0,0.1)]">
+              {!activeInvoice ? (
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center mb-2 text-sm text-gray-500">
+                    <span>Subtotal</span>
+                    <span>${cartTotal.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between items-center mb-4 text-sm text-gray-500">
+                    <span className="font-bold uppercase tracking-wider">Manual Discount</span>
+                    <input 
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={discountAmount}
+                      onChange={e => setDiscountAmount(e.target.value)}
+                      className="w-24 text-right border-b border-gray-300 focus:border-primary outline-none text-gray-900 bg-transparent font-bold"
+                    />
+                  </div>
+                  <div className="flex justify-between items-end mb-4 pt-4 border-t border-gray-100">
+                    <span className="text-sm font-bold text-gray-500 uppercase tracking-wider">Estimated Total</span>
+                    <span className="text-3xl font-extrabold text-gray-900">${Math.max(0, cartTotal - (parseFloat(discountAmount) || 0)).toFixed(2)}</span>
+                  </div>
+                  <button 
+                    onClick={handleStartCheckout}
+                    disabled={isProcessing || cart.length === 0}
+                    className="w-full py-4 bg-gray-900 text-white rounded-xl font-bold hover:bg-black transition-colors shadow-md flex justify-center items-center gap-2 active:scale-[0.99] disabled:opacity-70"
+                  >
+                    {isProcessing ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : null}
+                    {isProcessing ? 'Generating Invoice...' : 'Proceed to Checkout'}
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div className="flex justify-between items-center mb-6 bg-gray-50 p-4 rounded-xl border border-gray-100">
+                    <span className="font-bold text-gray-600">Amount Due</span>
+                    <span className="text-2xl font-extrabold text-primary">${activeInvoice.grandTotal?.toFixed(2)}</span>
+                  </div>
+                  
+                  {!clientSecret ? (
+                    <div className="space-y-6">
+                      <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Payment Amount (Partial Supported)</label>
+                        <div className="relative">
+                          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">$</span>
+                          <input 
+                            type="number" 
+                            step="0.01"
+                            value={paymentAmount}
+                            onChange={(e) => setPaymentAmount(e.target.value)}
+                            className="w-full pl-8 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all font-bold text-gray-900"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Select Payment Method</label>
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                          <button onClick={() => setPaymentMethod('CASH')} className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all ${paymentMethod === 'CASH' ? 'border-primary bg-primary/5 text-primary' : 'border-gray-100 bg-white text-gray-500 hover:border-gray-200'}`}>
+                            <Banknote className="w-6 h-6 mb-1" />
+                            <span className="text-[10px] font-bold">Cash</span>
+                          </button>
+                          <button onClick={() => setPaymentMethod('STRIPE')} className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all ${paymentMethod === 'STRIPE' ? 'border-[#635BFF] bg-[#635BFF]/5 text-[#635BFF]' : 'border-gray-100 bg-white text-gray-500 hover:border-gray-200'}`}>
+                            <CreditCard className="w-6 h-6 mb-1" />
+                            <span className="text-[10px] font-bold">Stripe</span>
+                          </button>
+                          <button onClick={() => setPaymentMethod('RAZORPAY')} className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all ${paymentMethod === 'RAZORPAY' ? 'border-[#3399cc] bg-[#3399cc]/5 text-[#3399cc]' : 'border-gray-100 bg-white text-gray-500 hover:border-gray-200'}`}>
+                            <ExternalLink className="w-6 h-6 mb-1" />
+                            <span className="text-[10px] font-bold">Razorpay</span>
+                          </button>
+                          <button onClick={() => setPaymentMethod('WALLET')} className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all ${paymentMethod === 'WALLET' ? 'border-emerald-500 bg-emerald-50 text-emerald-600' : 'border-gray-100 bg-white text-gray-500 hover:border-gray-200'}`}>
+                            <Wallet className="w-6 h-6 mb-1" />
+                            <span className="text-[10px] font-bold">Wallet</span>
+                          </button>
+                          <button onClick={() => setPaymentMethod('GIFT_CARD')} className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all ${paymentMethod === 'GIFT_CARD' ? 'border-pink-500 bg-pink-50 text-pink-600' : 'border-gray-100 bg-white text-gray-500 hover:border-gray-200'}`}>
+                            <Gift className="w-6 h-6 mb-1" />
+                            <span className="text-[10px] font-bold">Gift Card</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {paymentMethod === 'GIFT_CARD' && (
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Gift Card Code</label>
+                          <input 
+                            type="text"
+                            placeholder="Enter 16-digit code"
+                            id="giftCardCodeInput"
+                            className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-pink-500/20 focus:border-pink-500 outline-none transition-all font-bold text-gray-900"
+                          />
+                        </div>
+                      )}
+                      
+                      <button 
+                        onClick={handlePaymentSubmit}
+                        disabled={isProcessing}
+                        className="w-full py-4 bg-primary text-white rounded-xl font-bold shadow-lg hover:shadow-xl hover:bg-opacity-90 transition-all flex justify-center items-center gap-2 active:scale-[0.99] disabled:opacity-70"
+                      >
+                        {isProcessing ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : null}
+                        {isProcessing ? 'Processing...' : `Pay $${paymentAmount} via ${paymentMethod}`}
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
+                      <div className="flex justify-between items-center mb-4">
+                        <h4 className="font-bold text-gray-800">Complete Stripe Payment</h4>
+                        <button onClick={() => setClientSecret(null)} className="text-xs font-bold text-gray-500 hover:text-gray-800">Cancel</button>
+                      </div>
+                      <Elements stripe={stripePromise} options={{ clientSecret }}>
+                        <StripeCheckout 
+                          clientSecret={clientSecret} 
+                          invoiceId={activeInvoice.id} 
+                          amount={parseFloat(paymentAmount)}
+                          onPaymentSuccess={onStripeSuccess}
+                          onCancel={() => setClientSecret(null)}
+                        />
+                      </Elements>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </>
+          );
+        })() : selectedAppointmentId ? (() => {
           const appointment = appointments?.data?.find(a => a.id === selectedAppointmentId);
           if (!appointment) return null;
           
@@ -272,9 +558,24 @@ const POSPage = () => {
             <div className="bg-white border-t border-gray-100 p-6 shadow-[0_-4px_20px_-10px_rgba(0,0,0,0.1)]">
               {!activeInvoice ? (
                 <div className="space-y-4">
-                  <div className="flex justify-between items-end mb-4">
+                  <div className="flex justify-between items-center mb-2 text-sm text-gray-500">
+                    <span>Subtotal</span>
+                    <span>${appointment.totalPrice?.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between items-center mb-4 text-sm text-gray-500">
+                    <span className="font-bold uppercase tracking-wider">Manual Discount</span>
+                    <input 
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={discountAmount}
+                      onChange={e => setDiscountAmount(e.target.value)}
+                      className="w-24 text-right border-b border-gray-300 focus:border-primary outline-none text-gray-900 bg-transparent font-bold"
+                    />
+                  </div>
+                  <div className="flex justify-between items-end mb-4 pt-4 border-t border-gray-100">
                     <span className="text-sm font-bold text-gray-500 uppercase tracking-wider">Estimated Total</span>
-                    <span className="text-3xl font-extrabold text-gray-900">${appointment.totalPrice?.toFixed(2)}</span>
+                    <span className="text-3xl font-extrabold text-gray-900">${Math.max(0, (appointment.totalPrice || 0) - (parseFloat(discountAmount) || 0)).toFixed(2)}</span>
                   </div>
                   <button 
                     onClick={handleStartCheckout}
@@ -372,6 +673,48 @@ const POSPage = () => {
           </div>
         )}
       </div>
+
+      {/* Gift Card Modal */}
+      {showGiftCardModal && (
+        <div className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm flex justify-center items-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 animate-fade-in-up">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 rounded-full bg-pink-100 text-pink-600 flex items-center justify-center">
+                <Gift className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-gray-900">Sell Gift Card</h3>
+                <p className="text-sm text-gray-500">Issue a new digital gift card code</p>
+              </div>
+            </div>
+            
+            <form onSubmit={handleCreateGiftCard} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">16-Digit Code</label>
+                <div className="flex gap-2">
+                  <input required type="text" value={gcCode} onChange={e => setGcCode(e.target.value)} placeholder="e.g. 4839-XXXX-XXXX-XXXX" className="w-full border border-gray-200 p-3 rounded-xl focus:ring-2 focus:ring-pink-500 outline-none font-mono" />
+                  <button type="button" onClick={() => setGcCode(Math.random().toString(36).substring(2, 18).toUpperCase())} className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 rounded-xl text-sm font-bold">Auto</button>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Value Amount ($)</label>
+                <input required type="number" step="0.01" min="1" value={gcValue} onChange={e => setGcValue(e.target.value)} placeholder="50.00" className="w-full border border-gray-200 p-3 rounded-xl focus:ring-2 focus:ring-pink-500 outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Purchaser Name (Optional)</label>
+                <input type="text" value={gcPurchaser} onChange={e => setGcPurchaser(e.target.value)} placeholder="John Doe" className="w-full border border-gray-200 p-3 rounded-xl focus:ring-2 focus:ring-pink-500 outline-none" />
+              </div>
+
+              <div className="flex gap-3 pt-4 border-t border-gray-100">
+                <button type="button" onClick={() => setShowGiftCardModal(false)} className="flex-1 py-3 text-gray-600 bg-gray-50 hover:bg-gray-100 rounded-xl font-bold">Cancel</button>
+                <button type="submit" disabled={isCreatingGc} className="flex-1 py-3 bg-pink-600 text-white rounded-xl font-bold hover:bg-pink-700 disabled:opacity-50">
+                  {isCreatingGc ? 'Issuing...' : 'Issue Card'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
     </div>
   );

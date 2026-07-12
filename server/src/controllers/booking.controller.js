@@ -130,6 +130,13 @@ export const createAppointment = async (req, res, next) => {
         subject: 'Appointment Confirmation',
         body: notificationPayload
       });
+
+      await notificationQueue.add('fireWebhook', {
+        tenantId,
+        type: 'WEBHOOK',
+        subject: 'APPOINTMENT_CREATED',
+        body: JSON.stringify(appointment)
+      });
     } catch (queueErr) {
       console.error('[Booking] Notification queue failed (non-fatal):', queueErr.message);
     }
@@ -141,6 +148,178 @@ export const createAppointment = async (req, res, next) => {
     });
 
     sendSuccess(res, { ...finalAppointment, qrBase64 }, 201);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateAppointment = async (req, res, next) => {
+  try {
+    const tenantId = req.tenant.id;
+    const { id } = req.params;
+    const { date, notes, services } = req.body;
+
+    const appointment = await prisma.appointment.findUnique({
+      where: { id, tenantId },
+      include: { services: true }
+    });
+
+    if (!appointment) throw new AppError('Appointment not found', 404);
+    if (['COMPLETED', 'CANCELLED', 'NO_SHOW'].includes(appointment.status)) {
+      throw new AppError('Cannot update an appointment in this state', 400);
+    }
+
+    let updateData = { notes };
+    if (date) updateData.date = new Date(date);
+
+    // If services are provided, we must replace them
+    if (services && services.length > 0) {
+      // Validate worker availability sequentially
+      for (const s of services) {
+        await validateWorkerAvailability(tenantId, appointment.branchId, s.workerProfileId, s.startTime, s.endTime, id);
+      }
+
+      let totalPrice = 0;
+      let totalDuration = 0;
+      const serviceData = services.map(s => {
+        totalPrice += s.price;
+        const start = new Date(s.startTime);
+        const end = new Date(s.endTime);
+        totalDuration += (end.getTime() - start.getTime()) / 60000;
+        return {
+          serviceId: s.serviceId,
+          workerProfileId: s.workerProfileId,
+          startTime: start,
+          endTime: end,
+          price: s.price
+        };
+      });
+
+      updateData.totalPrice = totalPrice;
+      updateData.totalDuration = totalDuration;
+      
+      // We use a transaction to delete old services and create new ones
+      await prisma.$transaction([
+        prisma.appointmentService.deleteMany({ where: { appointmentId: id } }),
+        prisma.appointment.update({
+          where: { id },
+          data: {
+            ...updateData,
+            services: { create: serviceData }
+          }
+        })
+      ]);
+    } else {
+      await prisma.appointment.update({
+        where: { id },
+        data: updateData
+      });
+    }
+
+    await logActivity({
+      tenantId,
+      actorId: req.user.id,
+      action: 'APPOINTMENT_UPDATED',
+      resourceType: 'Appointment',
+      resourceId: id,
+      ipAddress: req.ip
+    });
+
+    const updatedAppointment = await prisma.appointment.findUnique({
+      where: { id },
+      include: { services: true }
+    });
+
+    sendSuccess(res, updatedAppointment);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateAppointmentStatus = async (req, res, next) => {
+  try {
+    const tenantId = req.tenant.id;
+    const { id } = req.params;
+    const { status } = req.body;
+
+    const appointment = await prisma.appointment.findUnique({ where: { id, tenantId } });
+    if (!appointment) throw new AppError('Appointment not found', 404);
+
+    const updatedAppointment = await prisma.appointment.update({
+      where: { id },
+      data: { status }
+    });
+
+    if (status === 'CANCELLED' || status === 'NO_SHOW') {
+      await prisma.appointmentService.updateMany({
+        where: { appointmentId: id },
+        data: { status }
+      });
+    }
+
+    await logActivity({
+      tenantId,
+      actorId: req.user.id,
+      action: 'APPOINTMENT_STATUS_UPDATED',
+      resourceType: 'Appointment',
+      resourceId: id,
+      newValues: { status },
+      ipAddress: req.ip
+    });
+
+    sendSuccess(res, updatedAppointment);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getWaitlist = async (req, res, next) => {
+  try {
+    const tenantId = req.tenant.id;
+    const waitlist = await prisma.waitlist.findMany({
+      where: { tenantId },
+      include: { customer: true },
+      orderBy: { createdAt: 'asc' }
+    });
+    sendSuccess(res, waitlist);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const createWaitlist = async (req, res, next) => {
+  try {
+    const tenantId = req.tenant.id;
+    const { customerId, preferredDate, notes } = req.body;
+
+    const entry = await prisma.waitlist.create({
+      data: {
+        tenantId,
+        customerId,
+        preferredDate: new Date(preferredDate),
+        notes
+      },
+      include: { customer: true }
+    });
+
+    sendSuccess(res, entry, 201);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateWaitlistStatus = async (req, res, next) => {
+  try {
+    const tenantId = req.tenant.id;
+    const { id } = req.params;
+    const { status } = req.body;
+
+    const entry = await prisma.waitlist.update({
+      where: { id, tenantId },
+      data: { status }
+    });
+
+    sendSuccess(res, entry);
   } catch (error) {
     next(error);
   }

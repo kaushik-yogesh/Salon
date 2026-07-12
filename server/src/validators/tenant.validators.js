@@ -18,7 +18,13 @@ export const updateTenantSchema = z.object({
     status: z.enum(['ACTIVE', 'SUSPENDED']).optional(),
     subscriptionTier: z.string().optional(),
     defaultCurrency: z.string().length(3).optional(),
-    defaultTimezone: z.string().optional()
+    defaultTimezone: z.string().optional(),
+    globalTaxRate: z.number().min(0).max(100).optional(),
+    businessHours: z.record(z.object({
+      isOpen: z.boolean(),
+      open: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, 'Invalid time format').optional(),
+      close: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, 'Invalid time format').optional()
+    })).optional()
   })
 });
 

@@ -26,3 +26,23 @@ export const createAppointmentSchema = z.object({
     });
   })
 });
+
+export const updateAppointmentSchema = z.object({
+  body: z.object({
+    date: z.string().datetime().optional(),
+    notes: z.string().optional(),
+    services: z.array(z.object({
+      serviceId: z.string().uuid(),
+      workerProfileId: z.string().uuid(),
+      startTime: z.string().datetime(),
+      endTime: z.string().datetime(),
+      price: z.number().min(0)
+    })).min(1, 'At least one service is required').optional()
+  })
+});
+
+export const updateAppointmentStatusSchema = z.object({
+  body: z.object({
+    status: z.enum(['CONFIRMED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'NO_SHOW'])
+  })
+});

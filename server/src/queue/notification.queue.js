@@ -1,5 +1,7 @@
 import { Queue, Worker } from 'bullmq';
 import { prisma } from '../utils/db.js';
+import axios from 'axios';
+import { sendSms } from '../services/sms.service.js';
 import { sendSms } from '../services/sms.service.js';
 
 // Setup Redis Connection
@@ -26,7 +28,30 @@ notificationQueue.on('error', err => {
 const notificationWorker = new Worker('notificationQueue', async (job) => {
   const { tenantId, customerId, type, subject, body, toPhone } = job.data;
   
-  if (type === 'SMS' && toPhone) {
+  if (type === 'WEBHOOK') {
+    const webhooks = await prisma.webhook.findMany({
+      where: {
+        tenantId,
+        isActive: true,
+        OR: [
+          { event: 'ALL' },
+          { event: subject }
+        ]
+      }
+    });
+    
+    for (const hook of webhooks) {
+      try {
+        await axios.post(hook.url, JSON.parse(body), {
+          headers: hook.secret ? { 'x-salon-signature': hook.secret } : {}
+        });
+        console.log(`[Queue] Successfully fired webhook to ${hook.url}`);
+      } catch (err) {
+        console.error(`[Queue] Failed to fire webhook to ${hook.url}:`, err.message);
+      }
+    }
+    return; // Do not log webhooks to NotificationLog
+  } else if (type === 'SMS' && toPhone) {
     // Send actual SMS via Twilio
     await sendSms(toPhone, body);
   } else {
@@ -68,3 +93,12 @@ notificationWorker.on('error', err => {
   }
 });
 
+// Graceful shutdown
+const gracefulShutdown = async (signal) => {
+  console.log(`Received ${signal}, closing worker...`);
+  await notificationWorker.close();
+  process.exit(0);
+};
+
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));

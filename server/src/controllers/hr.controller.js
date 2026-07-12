@@ -322,3 +322,122 @@ export const updateTimeOffStatus = async (req, res, next) => {
     next(error);
   }
 };
+
+// --- SHIFTS & ATTENDANCE ---
+
+export const getShifts = async (req, res, next) => {
+  try {
+    const tenantId = req.tenant.id;
+    const shifts = await prisma.shift.findMany({
+      where: { tenantId },
+      include: { workerProfile: { include: { user: { include: { profile: true } } } } }
+    });
+    sendSuccess(res, shifts);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const saveShifts = async (req, res, next) => {
+  try {
+    const tenantId = req.tenant.id;
+    const { shifts } = req.body; // array of { workerProfileId, dayOfWeek, startTime, endTime }
+
+    // For simplicity, we just clear and recreate the shifts for the involved workers.
+    const workerIds = [...new Set(shifts.map(s => s.workerProfileId))];
+
+    await prisma.shift.deleteMany({
+      where: { tenantId, workerProfileId: { in: workerIds } }
+    });
+
+    const newShifts = await prisma.shift.createMany({
+      data: shifts.map(s => ({
+        tenantId,
+        workerProfileId: s.workerProfileId,
+        dayOfWeek: parseInt(s.dayOfWeek),
+        startTime: s.startTime,
+        endTime: s.endTime
+      }))
+    });
+
+    sendSuccess(res, { message: 'Shifts saved successfully', count: newShifts.count });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const clockInOut = async (req, res, next) => {
+  try {
+    const tenantId = req.tenant.id;
+    const { workerProfileId, type } = req.body; // type: 'IN' or 'OUT'
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    let attendance = await prisma.attendance.findUnique({
+      where: { workerProfileId_date: { workerProfileId, date: today } }
+    });
+
+    if (!attendance) {
+      if (type === 'OUT') throw new Error('Cannot clock out without clocking in first.');
+      attendance = await prisma.attendance.create({
+        data: {
+          tenantId,
+          workerProfileId,
+          date: today,
+          clockIn: new Date(),
+          status: 'PRESENT'
+        }
+      });
+    } else {
+      if (type === 'IN') throw new Error('Already clocked in today.');
+      attendance = await prisma.attendance.update({
+        where: { id: attendance.id },
+        data: { clockOut: new Date() }
+      });
+    }
+
+    sendSuccess(res, attendance);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// --- DOCUMENTS & COMPLIANCE ---
+
+export const getWorkerDocuments = async (req, res, next) => {
+  try {
+    const tenantId = req.tenant.id;
+    const { id } = req.params; // Worker profile ID
+
+    const docs = await prisma.workerDocument.findMany({
+      where: { tenantId, workerProfileId: id }
+    });
+    sendSuccess(res, docs);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const addWorkerDocument = async (req, res, next) => {
+  try {
+    const tenantId = req.tenant.id;
+    const { id } = req.params; // Worker profile ID
+    const { documentType, documentNumber, expirationDate } = req.body;
+
+    const doc = await prisma.workerDocument.create({
+      data: {
+        tenantId,
+        workerProfileId: id,
+        documentType,
+        documentNumber,
+        expirationDate: expirationDate ? new Date(expirationDate) : null,
+        isVerified: false
+      }
+    });
+
+    sendSuccess(res, doc, 201);
+  } catch (error) {
+    next(error);
+  }
+};

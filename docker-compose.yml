@@ -1,51 +1,50 @@
 version: '3.8'
-
 services:
   db:
     image: postgres:15-alpine
-    restart: always
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
-      POSTGRES_DB: ${POSTGRES_DB:-sallondb}
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: salon_os
     ports:
       - "5432:5432"
     volumes:
-      - db_data:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d salon_os"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   redis:
     image: redis:7-alpine
-    restart: always
     ports:
       - "6379:6379"
 
   server:
-    build:
-      context: ./server
-      dockerfile: Dockerfile
-    restart: always
-    environment:
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-password}@db:5432/${POSTGRES_DB:-sallondb}?schema=public
-      - REDIS_URL=redis://redis:6379
-      - JWT_SECRET=${JWT_SECRET:-supersecretjwtkey_production}
-      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET:-supersecretrefreshkey_production}
-      - NODE_ENV=production
-      - PORT=5000
+    build: ./server
     ports:
       - "5000:5000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://user:password@db:5432/salon_os?schema=public
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=super_secret_jwt_key
+      - JWT_EXPIRES_IN=24h
+      - PORT=5000
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    # The container will run 'npx prisma generate' and then 'npm start'
 
   client:
-    build:
-      context: ./client
-      dockerfile: Dockerfile
-    restart: always
+    build: ./client
     ports:
       - "80:80"
     depends_on:
       - server
 
 volumes:
-  db_data:
+  pgdata:

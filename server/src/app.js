@@ -16,7 +16,14 @@ const __dirname = path.dirname(__filename);
 const app = express();
 
 // Security Middlewares
-app.use(helmet());
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" }
+}));
+
+import RedisStore from 'rate-limit-redis';
+import Redis from 'ioredis';
+
+const redisClient = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
 
 // Rate Limiting
 const limiter = rateLimit({
@@ -24,7 +31,10 @@ const limiter = rateLimit({
   max: process.env.NODE_ENV === 'production' ? 100 : 10000,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { success: false, error: { message: 'Too many requests, please try again later.' } }
+  message: { success: false, error: { message: 'Too many requests, please try again later.' } },
+  store: new RedisStore({
+    sendCommand: (...args) => redisClient.call(...args),
+  }),
 });
 app.use('/api', limiter);
 
@@ -35,10 +45,8 @@ const allowedOrigins = process.env.NODE_ENV === 'production'
 
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
-    // Allow all origins in development
     if (process.env.NODE_ENV !== 'production') {
       return callback(null, true);
     }
@@ -52,7 +60,6 @@ app.use(cors({
   credentials: true
 }));
 
-// Webhook routes must be parsed as raw before express.json()
 import webhookRoutes from './routes/webhook.routes.js';
 app.use('/api/v1/webhooks', express.raw({ type: 'application/json' }), webhookRoutes);
 
@@ -61,16 +68,13 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// Initialize CSRF Protection (We only apply this to specific stateful routes if needed)
-// import { csrfSynchronisedProtection } from './utils/csrf.util.js';
-// Removed global CSRF because this API uses Bearer tokens in localStorage, not session cookies for primary auth, making global CSRF redundant and a launch blocker.
-
-// Logging
+// Logging with Redaction
 app.use(pino({
   transport: {
     target: 'pino-pretty',
     options: { colorize: true }
-  }
+  },
+  redact: ['req.headers.authorization', 'req.headers.cookie', 'req.body.password']
 }));
 
 // Healthcheck
@@ -111,6 +115,7 @@ import pushRoutes from './routes/push.routes.js';
 import demoRoutes from './routes/demo.routes.js';
 import directoryRoutes from './routes/directory.routes.js';
 import customerPortalRoutes from './routes/customer-portal.routes.js';
+import marketingRoutes from './routes/marketing.routes.js';
 
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/execution', executionRoutes);
@@ -137,6 +142,7 @@ app.use('/api/v1/push', pushRoutes);
 app.use('/api/v1/demo', demoRoutes);
 app.use('/api/v1/directory', directoryRoutes);
 app.use('/api/v1/customer-portal', customerPortalRoutes);
+app.use('/api/v1/marketing', marketingRoutes);
 
 // Global Error Handler
 app.use((err, req, res, _next) => {

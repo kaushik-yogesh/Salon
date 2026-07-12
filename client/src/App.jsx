@@ -55,6 +55,7 @@ const CustomerHistoryPage = lazy(() => import('./pages/CustomerHistoryPage'));
 const WorkerEarningsPage = lazy(() => import('./pages/WorkerEarningsPage'));
 const ReportsPage = lazy(() => import('./pages/ReportsPage'));
 const InvoiceHistoryPage = lazy(() => import('./pages/InvoiceHistoryPage'));
+const MarketingPage = lazy(() => import('./pages/MarketingPage'));
 
 const LoadingFallback = () => (
   <div className="flex h-screen w-screen items-center justify-center">
@@ -116,6 +117,7 @@ function App() {
             <Route path="hr" element={<HRPage />} />
             <Route path="catalog" element={<CatalogPage />} />
             <Route path="inventory" element={<InventoryPage />} />
+            <Route path="marketing" element={<MarketingPage />} />
             <Route path="expenses" element={<ExpensesPage />} />
             <Route path="salary" element={<SalaryPage />} />
             <Route path="reports" element={<ReportsPage />} />

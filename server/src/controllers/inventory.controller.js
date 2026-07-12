@@ -59,3 +59,85 @@ export const adjustStock = async (req, res, next) => {
     next(error);
   }
 };
+
+export const createProduct = async (req, res, next) => {
+  try {
+    const tenantId = req.tenant.id;
+    const { branchId, sku, name, description, retailPrice, costPrice, stockQuantity, lowStockThreshold, status } = req.body;
+
+    const existingProduct = await prisma.product.findUnique({
+      where: { tenantId_sku: { tenantId, sku } }
+    });
+
+    if (existingProduct) {
+      throw new Error(`Product with SKU ${sku} already exists`);
+    }
+
+    const newProduct = await prisma.product.create({
+      data: {
+        tenantId,
+        branchId,
+        sku,
+        name,
+        description,
+        retailPrice,
+        costPrice,
+        stockQuantity,
+        lowStockThreshold,
+        status
+      }
+    });
+
+    if (stockQuantity > 0) {
+      await prisma.inventoryTransaction.create({
+        data: {
+          productId: newProduct.id,
+          type: 'RESTOCK',
+          quantity: stockQuantity,
+          notes: 'Initial Stock'
+        }
+      });
+    }
+
+    await logActivity({
+      tenantId,
+      actorId: req.user.id,
+      action: 'PRODUCT_CREATED',
+      resourceType: 'Product',
+      resourceId: newProduct.id,
+      ipAddress: req.ip
+    });
+
+    sendSuccess(res, newProduct, 201);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getSuppliers = async (req, res, next) => {
+  try {
+    const tenantId = req.tenant.id;
+    const suppliers = await prisma.supplier.findMany({
+      where: { tenantId },
+      orderBy: { name: 'asc' }
+    });
+    sendSuccess(res, suppliers);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const createSupplier = async (req, res, next) => {
+  try {
+    const tenantId = req.tenant.id;
+    const { name, contactPerson, email, phone, address } = req.body;
+
+    const supplier = await prisma.supplier.create({
+      data: { tenantId, name, contactPerson, email, phone, address }
+    });
+
+    sendSuccess(res, supplier, 201);
+  } catch (error) {
+    next(error);
+  }
+};

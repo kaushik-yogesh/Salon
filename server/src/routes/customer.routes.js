@@ -10,6 +10,7 @@ router.use(requireAuth);
 router.get('/', requirePermission('CUSTOMERS', 'READ'), customerController.getCustomers);
 router.get('/:id', requirePermission('CUSTOMERS', 'READ'), customerController.getCustomerById);
 router.post('/', requirePermission('CUSTOMERS', 'CREATE'), customerController.createCustomer);
+router.post('/bulk-import', requirePermission('CUSTOMERS', 'CREATE'), customerController.importCustomers);
 router.put('/:id', requirePermission('CUSTOMERS', 'UPDATE'), customerController.updateCustomer);
 router.delete('/:id', requirePermission('CUSTOMERS', 'DELETE'), customerController.deleteCustomer);
 

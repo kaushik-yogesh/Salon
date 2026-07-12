@@ -28,6 +28,13 @@ export const buildInvoicePayload = async (tenantId, appointmentId, branchId, cus
     });
   }
 
+  // Fetch tenant to get globalTaxRate
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { globalTaxRate: true }
+  });
+  const globalTaxRate = tenant?.globalTaxRate || 0;
+
   // Add Retail Products
   for (const p of additionalProducts) {
     const product = await prisma.product.findUnique({
@@ -40,12 +47,12 @@ export const buildInvoicePayload = async (tenantId, appointmentId, branchId, cus
     }
 
     const unitPrice = product.retailPrice;
-    // Assuming standard retail tax, simplified here as 0 for products unless defined on schema
-    const taxAmount = 0; 
-    const itemTotal = (unitPrice * p.quantity) + taxAmount;
+    // Apply global tax rate to retail products
+    const taxAmount = (unitPrice * (globalTaxRate / 100)); 
+    const itemTotal = (unitPrice * p.quantity) + (taxAmount * p.quantity);
 
     subtotal += (unitPrice * p.quantity);
-    taxTotal += taxAmount;
+    taxTotal += (taxAmount * p.quantity);
 
     lineItemsData.push({
       type: 'PRODUCT',

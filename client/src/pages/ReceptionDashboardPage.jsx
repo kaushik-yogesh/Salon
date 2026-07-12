@@ -12,6 +12,28 @@ const ReceptionDashboardPage = () => {
   const [loadingWalkIn, setLoadingWalkIn] = useState(false);
   const [successToken, setSuccessToken] = useState(null);
 
+  const [showWaitlistModal, setShowWaitlistModal] = useState(false);
+  const [waitlistCustomerId, setWaitlistCustomerId] = useState('');
+  const [waitlistDate, setWaitlistDate] = useState('');
+  const [waitlistNotes, setWaitlistNotes] = useState('');
+  const [loadingWaitlist, setLoadingWaitlist] = useState(false);
+
+  const { data: waitlistData, refetch: refetchWaitlist } = useQuery({
+    queryKey: ['waitlist'],
+    queryFn: async () => {
+      const res = await api.get('/bookings/waitlist');
+      return res.data?.data;
+    }
+  });
+
+  const { data: customersData } = useQuery({
+    queryKey: ['customers'],
+    queryFn: async () => {
+      const res = await api.get('/customers');
+      return res.data?.data;
+    }
+  });
+
   const { data: metrics, isLoading } = useQuery({
     queryKey: ['dashboard-metrics'],
     queryFn: async () => {
@@ -95,12 +117,20 @@ const ReceptionDashboardPage = () => {
           <h1 className="text-2xl font-bold text-gray-900">Front Desk</h1>
           <p className="text-gray-500 text-sm">Manage today's appointments and walk-ins.</p>
         </div>
-        <button 
-          onClick={() => setShowWalkInModal(true)}
-          className="bg-rose-600 text-white px-4 py-2 rounded-md hover:bg-rose-700 text-sm font-medium shadow-sm"
-        >
-          + New Walk-in
-        </button>
+        <div className="flex gap-3">
+          <button 
+            onClick={() => setShowWaitlistModal(true)}
+            className="bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-50 text-sm font-medium shadow-sm"
+          >
+            + Waitlist
+          </button>
+          <button 
+            onClick={() => setShowWalkInModal(true)}
+            className="bg-rose-600 text-white px-4 py-2 rounded-md hover:bg-rose-700 text-sm font-medium shadow-sm"
+          >
+            + New Walk-in
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -157,6 +187,86 @@ const ReceptionDashboardPage = () => {
           </div>
         </div>
       </div>
+
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-100">
+            <h2 className="text-lg font-bold text-gray-900">Waitlist</h2>
+          </div>
+          <div className="p-0">
+            {!waitlistData || waitlistData.length === 0 ? (
+              <p className="p-6 text-sm text-gray-500 text-center">No one on the waitlist.</p>
+            ) : (
+              <ul className="divide-y divide-gray-100 max-h-64 overflow-y-auto">
+                {waitlistData.filter(w => w.status === 'PENDING').map(w => (
+                  <li key={w.id} className="px-6 py-4 flex justify-between items-center hover:bg-gray-50">
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{w.customer?.firstName} {w.customer?.lastName}</p>
+                      <p className="text-xs text-gray-500">Prefers: {new Date(w.preferredDate).toLocaleDateString()}</p>
+                    </div>
+                    <button 
+                      onClick={async () => {
+                        await api.put(`/bookings/waitlist/${w.id}/status`, { status: 'FULFILLED' });
+                        refetchWaitlist();
+                      }}
+                      className="text-xs font-bold text-rose-600 bg-rose-50 px-2 py-1 rounded hover:bg-rose-100"
+                    >
+                      Fulfill
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* WAITLIST MODAL */}
+      {showWaitlistModal && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex justify-center items-center z-50">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Add to Waitlist</h2>
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              setLoadingWaitlist(true);
+              try {
+                await api.post('/bookings/waitlist', {
+                  customerId: waitlistCustomerId,
+                  preferredDate: waitlistDate,
+                  notes: waitlistNotes
+                });
+                setShowWaitlistModal(false);
+                refetchWaitlist();
+              } catch(err) {
+                alert('Error adding to waitlist');
+              } finally {
+                setLoadingWaitlist(false);
+              }
+            }} className="space-y-4">
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">Customer</label>
+                <select required value={waitlistCustomerId} onChange={e => setWaitlistCustomerId(e.target.value)} className="w-full border border-gray-300 rounded p-2">
+                  <option value="">-- Select Customer --</option>
+                  {customersData?.map(c => <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">Preferred Date</label>
+                <input type="date" required value={waitlistDate} onChange={e => setWaitlistDate(e.target.value)} className="w-full border border-gray-300 rounded p-2" />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">Notes</label>
+                <input type="text" value={waitlistNotes} onChange={e => setWaitlistNotes(e.target.value)} className="w-full border border-gray-300 rounded p-2" />
+              </div>
+              <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
+                <button type="button" onClick={() => setShowWaitlistModal(false)} className="px-4 py-2 text-gray-600 font-bold hover:bg-gray-100 rounded">Cancel</button>
+                <button type="submit" disabled={loadingWaitlist} className="px-4 py-2 bg-rose-600 text-white font-bold rounded hover:bg-rose-700 disabled:opacity-50">
+                  {loadingWaitlist ? 'Saving...' : 'Add to Waitlist'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* WALK-IN MODAL */}
       {showWalkInModal && (

@@ -12,6 +12,7 @@ router.post('/bookings', portalController.createBooking);
 router.post('/bookings/:id/cancel', portalController.cancelBooking);
 router.get('/bookings/:id/qr', portalController.getBookingQR);
 router.get('/wallets', portalController.getWallets);
+router.post('/wallets/:tenantId/topup', portalController.topUpWallet);
 router.put('/profile', portalController.updateProfile);
 
 export default router;

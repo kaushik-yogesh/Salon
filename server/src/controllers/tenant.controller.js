@@ -75,14 +75,53 @@ export const createTenant = async (req, res, next) => {
 export const updateTenant = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { name, status, subscriptionTier, defaultCurrency, defaultTimezone } = req.body;
+    const { 
+      name, 
+      status,
+      subscriptionTier,
+      defaultCurrency, 
+      defaultTimezone, 
+      globalTaxRate, 
+      businessHours,
+      stripeSecretKey,
+      stripeWebhookSecret,
+      twilioAccountSid,
+      twilioAuthToken,
+      twilioPhoneNumber,
+      logoUrl,
+      primaryColor,
+      invoiceFooterText,
+      receiptMessage
+    } = req.body;
 
     const existingTenant = await prisma.tenant.findUnique({ where: { id, deletedAt: null } });
     if (!existingTenant) throw new NotFoundError('Tenant not found');
 
+    const updateData = {};
+    if (name) updateData.name = name;
+    if (status) updateData.status = status;
+    if (subscriptionTier) updateData.subscriptionTier = subscriptionTier;
+    if (defaultCurrency) updateData.defaultCurrency = defaultCurrency;
+    if (defaultTimezone) updateData.defaultTimezone = defaultTimezone;
+    if (globalTaxRate !== undefined) updateData.globalTaxRate = parseFloat(globalTaxRate);
+    if (businessHours) updateData.businessHours = businessHours;
+    
+    // Integrations
+    if (stripeSecretKey !== undefined) updateData.stripeSecretKey = stripeSecretKey;
+    if (stripeWebhookSecret !== undefined) updateData.stripeWebhookSecret = stripeWebhookSecret;
+    if (twilioAccountSid !== undefined) updateData.twilioAccountSid = twilioAccountSid;
+    if (twilioAuthToken !== undefined) updateData.twilioAuthToken = twilioAuthToken;
+    if (twilioPhoneNumber !== undefined) updateData.twilioPhoneNumber = twilioPhoneNumber;
+
+    // Branding
+    if (logoUrl !== undefined) updateData.logoUrl = logoUrl;
+    if (primaryColor !== undefined) updateData.primaryColor = primaryColor;
+    if (invoiceFooterText !== undefined) updateData.invoiceFooterText = invoiceFooterText;
+    if (receiptMessage !== undefined) updateData.receiptMessage = receiptMessage;
+
     const updatedTenant = await prisma.tenant.update({
       where: { id },
-      data: { name, status, subscriptionTier, defaultCurrency, defaultTimezone }
+      data: updateData
     });
 
     await logActivity({
@@ -149,6 +188,75 @@ export const markSetupComplete = async (req, res, next) => {
     });
 
     sendSuccess(res, updatedTenant);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const upgradeSubscription = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { tier } = req.body; // e.g., 'PRO', 'ENTERPRISE'
+
+    const existingTenant = await prisma.tenant.findUnique({ where: { id, deletedAt: null } });
+    if (!existingTenant) throw new NotFoundError('Tenant not found');
+
+    const updatedTenant = await prisma.tenant.update({
+      where: { id },
+      data: { subscriptionTier: tier }
+    });
+
+    await logActivity({
+      tenantId: id,
+      actorId: req.user?.id,
+      action: 'SUBSCRIPTION_UPGRADED',
+      resourceType: 'Tenant',
+      resourceId: id,
+      newValues: { tier },
+      ipAddress: req.ip
+    });
+
+    sendSuccess(res, { message: `Successfully upgraded to ${tier} plan!`, tenant: updatedTenant });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getWebhooks = async (req, res, next) => {
+  try {
+    const tenantId = req.tenant.id;
+    const webhooks = await prisma.webhook.findMany({
+      where: { tenantId },
+      orderBy: { createdAt: 'desc' }
+    });
+    sendSuccess(res, webhooks);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const createWebhook = async (req, res, next) => {
+  try {
+    const tenantId = req.tenant.id;
+    const { url, event, secret } = req.body;
+    
+    const webhook = await prisma.webhook.create({
+      data: { tenantId, url, event: event || 'ALL', secret }
+    });
+
+    sendSuccess(res, webhook, 201);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const deleteWebhook = async (req, res, next) => {
+  try {
+    const tenantId = req.tenant.id;
+    const { id } = req.params;
+
+    await prisma.webhook.delete({ where: { id, tenantId } });
+    sendSuccess(res, { message: 'Webhook deleted' });
   } catch (error) {
     next(error);
   }

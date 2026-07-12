@@ -18,10 +18,24 @@ model Tenant {
   subscriptionTier String    @default("BASIC")
   defaultCurrency  String    @default("USD")
   defaultTimezone  String    @default("UTC")
-  setupComplete    Boolean   @default(false)
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-  deletedAt        DateTime?
+  businessHours    Json?
+  globalTaxRate    Float     @default(0.0)
+  setupComplete       Boolean   @default(false)
+  stripeSecretKey     String?
+  stripeWebhookSecret String?
+  twilioAccountSid    String?
+  twilioAuthToken     String?
+  twilioPhoneNumber   String?
+
+  // Branding
+  logoUrl           String?
+  primaryColor      String  @default("#4f46e5") // Indigo-600 default
+  invoiceFooterText String?
+  receiptMessage    String?
+
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  deletedAt           DateTime?
 
   branches        Branch[]
   users           User[]
@@ -41,6 +55,11 @@ model Tenant {
   NotificationLog NotificationLog[]
   SalaryRun       SalaryRun[]
   Expense         Expense[]
+  Supplier        Supplier[]
+  PurchaseOrder   PurchaseOrder[]
+  GiftCard        GiftCard[]
+  Waitlist        Waitlist[]
+  Webhook           Webhook[]
 }
 
 model Branch {
@@ -49,6 +68,7 @@ model Branch {
   name      String
   address   String?
   capacity  Int       @default(10)
+  businessHours Json?
   status    String    @default("ACTIVE")
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -119,6 +139,34 @@ model Role {
   users       UserRole[]
 
   @@unique([tenantId, name])
+}
+
+
+model Shift {
+  id              String   @id @default(uuid())
+  tenantId        String
+  workerProfileId String
+  dayOfWeek       Int      // 0 = Sunday, 1 = Monday, etc.
+  startTime       String   // e.g., "09:00"
+  endTime         String   // e.g., "17:00"
+  createdAt       DateTime @default(now())
+
+  workerProfile WorkerProfile @relation(fields: [workerProfileId], references: [id], onDelete: Cascade)
+}
+
+model Attendance {
+  id              String   @id @default(uuid())
+  tenantId        String
+  workerProfileId String
+  date            DateTime @db.Date
+  clockIn         DateTime?
+  clockOut        DateTime?
+  status          String   @default("PRESENT") // PRESENT, ABSENT, LATE, HALF_DAY
+  createdAt       DateTime @default(now())
+
+  workerProfile WorkerProfile @relation(fields: [workerProfileId], references: [id], onDelete: Cascade)
+  
+  @@unique([workerProfileId, date])
 }
 
 model Permission {
@@ -341,6 +389,24 @@ model WorkerProfile {
   AppointmentService AppointmentService[]
   ExecutionLog       ExecutionLog[]
   SalaryRunItem      SalaryRunItem[]
+  shifts             Shift[]
+  attendance         Attendance[]
+  documents          WorkerDocument[]
+}
+
+model WorkerDocument {
+  id              String   @id @default(uuid())
+  tenantId        String
+  workerProfileId String
+  documentType    String   // e.g., "COSMETOLOGY_LICENSE", "ID", "W9"
+  documentUrl     String?  // Cloud storage URL
+  documentNumber  String?
+  expirationDate  DateTime?
+  isVerified      Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  workerProfile   WorkerProfile @relation(fields: [workerProfileId], references: [id], onDelete: Cascade)
 }
 
 model WorkerService {
@@ -398,6 +464,7 @@ model Customer {
   lastName      String
   phone         String?
   email         String?
+  tags          String[]
   notes         String?
   lifetimeValue Float    @default(0.0)
   walletBalance Float    @default(0.0)
@@ -408,9 +475,13 @@ model Customer {
   tenant          Tenant            @relation(fields: [tenantId], references: [id])
   user            User?             @relation(fields: [userId], references: [id])
   appointments    Appointment[]
+  Invoice         Invoice[]
+  waitlistEntries Waitlist[]
   NotificationLog NotificationLog[]
 
   @@unique([tenantId, email])
+  @@index([tenantId, email])
+  @@index([tenantId, phone])
 }
 
 model Appointment {
@@ -434,6 +505,8 @@ model Appointment {
   customer     Customer             @relation(fields: [customerId], references: [id])
   services     AppointmentService[]
   ExecutionLog ExecutionLog[]
+
+  @@index([tenantId, date])
 }
 
 model AppointmentService {
@@ -473,8 +546,12 @@ model Invoice {
 
   tenant    Tenant            @relation(fields: [tenantId], references: [id])
   branch    Branch            @relation(fields: [branchId], references: [id])
+  customer  Customer?         @relation(fields: [customerId], references: [id])
   lineItems InvoiceLineItem[]
   payments  Payment[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, createdAt])
 }
 
 model InvoiceLineItem {
@@ -528,6 +605,7 @@ model Product {
   tenant       Tenant                 @relation(fields: [tenantId], references: [id])
   branch       Branch                 @relation(fields: [branchId], references: [id])
   transactions InventoryTransaction[]
+  purchaseOrderItems PurchaseOrderItem[]
 
   @@unique([tenantId, sku])
 }
@@ -541,6 +619,49 @@ model InventoryTransaction {
   createdAt DateTime @default(now())
 
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+model Supplier {
+  id            String   @id @default(uuid())
+  tenantId      String
+  name          String
+  contactPerson String?
+  email         String?
+  phone         String?
+  address       String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tenant         Tenant          @relation(fields: [tenantId], references: [id])
+  purchaseOrders PurchaseOrder[]
+}
+
+model PurchaseOrder {
+  id         String   @id @default(uuid())
+  tenantId   String
+  supplierId String
+  status     String   @default("DRAFT") // DRAFT, SENT, RECEIVED, CANCELLED
+  totalCost  Float    @default(0.0)
+  expectedAt DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  tenant   Tenant              @relation(fields: [tenantId], references: [id])
+  supplier Supplier            @relation(fields: [supplierId], references: [id])
+  items    PurchaseOrderItem[]
+}
+
+model PurchaseOrderItem {
+  id              String   @id @default(uuid())
+  purchaseOrderId String
+  productId       String
+  quantity        Int
+  unitCost        Float
+  totalCost       Float
+  createdAt       DateTime @default(now())
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  product       Product       @relation(fields: [productId], references: [id])
 }
 
 model ExecutionLog {
@@ -659,4 +780,45 @@ model OtpVerification {
   expiresAt  DateTime
   attempts   Int      @default(0)
   createdAt  DateTime @default(now())
+}
+
+model GiftCard {
+  id              String   @id @default(uuid())
+  tenantId        String
+  code            String   @unique
+  initialValue    Float
+  currentBalance  Float
+  expiresAt       DateTime?
+  purchaserName   String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant          Tenant   @relation(fields: [tenantId], references: [id])
+}
+
+model Waitlist {
+  id              String   @id @default(uuid())
+  tenantId        String
+  customerId      String
+  preferredDate   DateTime
+  notes           String?
+  status          String   @default("PENDING")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant          Tenant   @relation(fields: [tenantId], references: [id])
+  customer        Customer @relation(fields: [customerId], references: [id])
+}
+
+model Webhook {
+  id        String   @id @default(uuid())
+  tenantId  String
+  url       String
+  event     String   @default("ALL") // APPOINTMENT_CREATED, INVOICE_PAID, etc.
+  secret    String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
 }

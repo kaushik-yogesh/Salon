@@ -23,10 +23,32 @@ const DashboardPage = () => {
 
   return (
     <div className="p-8 max-w-7xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-secondary">SalonOS Overview (30 Days)</h1>
-        <p className="text-gray-500">Welcome back. Here's your financial performance.</p>
+      <div className="mb-8 flex justify-between items-end">
+        <div>
+          <h1 className="text-3xl font-bold text-secondary">SalonOS Overview (30 Days)</h1>
+          <p className="text-gray-500">Welcome back. Here's your financial performance.</p>
+        </div>
       </div>
+
+      {metrics?.aiInsights && metrics.aiInsights.length > 0 && (
+        <div className="mb-8 bg-gradient-to-r from-indigo-50 to-purple-50 p-6 rounded-2xl border border-indigo-100 shadow-sm">
+          <div className="flex items-center gap-2 mb-4">
+            <span className="text-2xl">✨</span>
+            <h2 className="text-xl font-extrabold text-indigo-900">AI Copilot Insights</h2>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {metrics.aiInsights.map((insight, idx) => (
+              <div key={idx} className="bg-white/60 backdrop-blur-sm p-4 rounded-xl border border-indigo-50 flex gap-3 items-start">
+                <div className={`mt-1 flex-shrink-0 w-2 h-2 rounded-full ${insight.severity === 'WARNING' ? 'bg-orange-500' : 'bg-indigo-500'}`}></div>
+                <div>
+                  <p className="text-sm font-bold text-gray-900 mb-1">{insight.type}</p>
+                  <p className="text-sm text-gray-700">{insight.message}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">

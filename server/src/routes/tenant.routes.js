@@ -1,6 +1,7 @@
 import express from 'express';
 import { 
-  getTenants, getTenant, createTenant, updateTenant, deleteTenant, markSetupComplete 
+  getTenants, getTenant, createTenant, updateTenant, deleteTenant, markSetupComplete, upgradeSubscription,
+  getWebhooks, createWebhook, deleteWebhook 
 } from '../controllers/tenant.controller.js';
 import { requireAuth } from '../middlewares/auth.middleware.js';
 import { requirePermission } from '../middlewares/rbac.middleware.js';
@@ -25,5 +26,13 @@ router.delete('/:id', requirePermission('TENANTS', 'DELETE'), validate(tenantIdS
 
 // Setup wizard completion — accessible to the tenant owner directly
 router.patch('/:id/setup-complete', markSetupComplete);
+
+// Billing & Subscription
+router.post('/:id/subscription', requirePermission('TENANTS', 'UPDATE'), upgradeSubscription);
+
+// Webhooks
+router.get('/:id/webhooks', requirePermission('SETTINGS', 'READ'), getWebhooks);
+router.post('/:id/webhooks', requirePermission('SETTINGS', 'UPDATE'), createWebhook);
+router.delete('/:id/webhooks/:webhookId', requirePermission('SETTINGS', 'UPDATE'), deleteWebhook);
 
 export default router;

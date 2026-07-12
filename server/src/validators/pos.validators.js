@@ -2,11 +2,20 @@ import { z } from 'zod';
 
 export const checkoutSchema = z.object({
   body: z.object({
-    appointmentId: z.string().uuid('Invalid appointment ID format'),
+    appointmentId: z.string().uuid('Invalid appointment ID format').optional(),
+    branchId: z.string().uuid('Invalid branch ID format').optional(),
+    customerId: z.string().uuid('Invalid customer ID format').optional(),
     additionalProducts: z.array(z.object({
       productId: z.string().uuid('Invalid product ID format'),
       quantity: z.number().int().min(1)
     })).optional()
+  }).superRefine((data, ctx) => {
+    if (!data.appointmentId && !data.branchId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Must provide either appointmentId or branchId (for walk-in retail)'
+      });
+    }
   })
 });
 

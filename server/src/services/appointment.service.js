@@ -1,7 +1,7 @@
 import { prisma } from '../utils/db.js';
 import { AppError } from '../utils/errors.util.js';
 
-export const validateWorkerAvailability = async (tenantId, branchId, workerProfileId, requestedStartTime, requestedEndTime) => {
+export const validateWorkerAvailability = async (tenantId, branchId, workerProfileId, requestedStartTime, requestedEndTime, excludeAppointmentId = null) => {
   const reqStart = new Date(requestedStartTime);
   const reqEnd = new Date(requestedEndTime);
 
@@ -67,6 +67,7 @@ export const validateWorkerAvailability = async (tenantId, branchId, workerProfi
   const overlappingAppointment = await prisma.appointmentService.findFirst({
     where: {
       workerProfileId,
+      appointmentId: excludeAppointmentId ? { not: excludeAppointmentId } : undefined,
       appointment: {
         status: { notIn: ['CANCELLED', 'NO_SHOW'] }
       },
@@ -87,6 +88,7 @@ export const validateWorkerAvailability = async (tenantId, branchId, workerProfi
     if (branch) {
       const concurrentServices = await prisma.appointmentService.count({
         where: {
+          appointmentId: excludeAppointmentId ? { not: excludeAppointmentId } : undefined,
           appointment: {
             branchId,
             status: { notIn: ['CANCELLED', 'NO_SHOW'] }

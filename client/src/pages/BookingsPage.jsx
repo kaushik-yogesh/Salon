@@ -9,6 +9,11 @@ const getLocalDateString = (d = new Date()) => {
 
 const BookingsPage = () => {
   const [activeDate, setActiveDate] = useState(getLocalDateString());
+  const [selectedAppt, setSelectedAppt] = useState(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editData, setEditData] = useState({});
+  const queryClient = useQueryClient();
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['bookings', activeDate],
@@ -39,6 +44,72 @@ const BookingsPage = () => {
       };
     }
   });
+
+  const cancelMutation = useMutation({
+    mutationFn: async (id) => api.put(`/bookings/${id}/status`, { status: 'CANCELLED' }),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['bookings', activeDate]);
+      setIsModalOpen(false);
+      setSelectedAppt(null);
+    }
+  });
+
+  const noShowMutation = useMutation({
+    mutationFn: async (id) => api.put(`/bookings/${id}/status`, { status: 'NO_SHOW' }),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['bookings', activeDate]);
+      setIsModalOpen(false);
+      setSelectedAppt(null);
+    }
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, payload }) => api.put(`/bookings/${id}`, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['bookings', activeDate]);
+      setIsModalOpen(false);
+      setSelectedAppt(null);
+      setIsEditing(false);
+    }
+  });
+
+  const handleEditSave = () => {
+    if (!editData.date || !editData.time) return alert('Date and Time are required');
+    
+    const [hours, minutes] = editData.time.split(':');
+    const newBaseDate = new Date(editData.date);
+    newBaseDate.setHours(parseInt(hours, 10), parseInt(minutes, 10), 0, 0);
+
+    // Shift all services relative to the new base start time
+    let currentStartTime = new Date(newBaseDate);
+    const updatedServices = selectedAppt.services.map(s => {
+      const oldStart = new Date(s.startTime);
+      const oldEnd = new Date(s.endTime);
+      const durationMs = oldEnd.getTime() - oldStart.getTime();
+      
+      const newStart = new Date(currentStartTime);
+      const newEnd = new Date(newStart.getTime() + durationMs);
+      
+      currentStartTime = new Date(newEnd); // next service starts when this one ends
+
+      return {
+        serviceId: s.serviceId,
+        workerProfileId: s.workerProfileId,
+        startTime: newStart.toISOString(),
+        endTime: newEnd.toISOString(),
+        price: s.price
+      };
+    });
+
+    updateMutation.mutate({
+      id: selectedAppt.id,
+      payload: {
+        date: newBaseDate.toISOString(),
+        notes: editData.notes,
+        services: updatedServices
+      }
+    });
+  };
 
   if (isLoading) return <div className="p-8 text-center text-secondary">Loading calendar...</div>;
   if (error) return <div className="p-8 text-center text-danger">Error loading calendar</div>;
@@ -122,6 +193,7 @@ const BookingsPage = () => {
                       return (
                         <div 
                           key={s.id} 
+                          onClick={() => { setSelectedAppt(app); setIsModalOpen(true); }}
                           className="absolute left-2 right-2 bg-blue-50 border border-blue-200 rounded p-2 text-xs shadow-sm hover:shadow-md transition cursor-pointer"
                           style={{ top: `${Math.max(0, topOffset)}px` }}
                         >
@@ -141,6 +213,124 @@ const BookingsPage = () => {
           </div>
         </div>
       </div>
+
+      {isModalOpen && selectedAppt && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">{isEditing ? 'Edit Appointment' : 'Appointment Details'}</h2>
+            
+            {!isEditing ? (
+              <div className="space-y-3 mb-6">
+                <p><strong>Customer:</strong> {selectedAppt.customer?.firstName} {selectedAppt.customer?.lastName}</p>
+                <p><strong>Status:</strong> {selectedAppt.status}</p>
+                <p><strong>Date:</strong> {new Date(selectedAppt.date).toLocaleDateString()}</p>
+                <p><strong>Time:</strong> {selectedAppt.services?.[0]?.startTime ? new Date(selectedAppt.services[0].startTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'N/A'}</p>
+                <p><strong>Notes:</strong> {selectedAppt.notes || 'None'}</p>
+                <div>
+                  <strong>Services:</strong>
+                  <ul className="list-disc ml-5 mt-1 text-sm text-gray-600">
+                    {selectedAppt.services?.map(s => (
+                      <li key={s.id}>{s.service?.name} with {s.worker?.user?.profile?.firstName}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4 mb-6">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1">Date</label>
+                  <input 
+                    type="date" 
+                    value={editData.date}
+                    onChange={(e) => setEditData({...editData, date: e.target.value})}
+                    className="w-full border border-gray-300 rounded p-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1">Start Time</label>
+                  <input 
+                    type="time" 
+                    value={editData.time}
+                    onChange={(e) => setEditData({...editData, time: e.target.value})}
+                    className="w-full border border-gray-300 rounded p-2"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Changing this will shift all services accordingly.</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1">Notes</label>
+                  <textarea 
+                    value={editData.notes}
+                    onChange={(e) => setEditData({...editData, notes: e.target.value})}
+                    className="w-full border border-gray-300 rounded p-2"
+                    rows="3"
+                  ></textarea>
+                </div>
+              </div>
+            )}
+            
+            <div className="flex justify-between items-center pt-4 border-t border-gray-100">
+              {!isEditing ? (
+                <>
+                  <div className="flex space-x-2">
+                    <button 
+                      onClick={() => { if(window.confirm('Are you sure you want to cancel this appointment?')) cancelMutation.mutate(selectedAppt.id); }}
+                      className="text-red-600 font-bold text-sm hover:text-red-800"
+                    >
+                      Cancel Booking
+                    </button>
+                    <span className="text-gray-300">|</span>
+                    <button 
+                      onClick={() => { if(window.confirm('Mark this customer as a No-Show?')) noShowMutation.mutate(selectedAppt.id); }}
+                      className="text-orange-600 font-bold text-sm hover:text-orange-800"
+                    >
+                      Mark No-Show
+                    </button>
+                  </div>
+                  <div className="space-x-2">
+                    <button 
+                      onClick={() => {
+                        const firstServiceDate = selectedAppt.services?.[0]?.startTime ? new Date(selectedAppt.services[0].startTime) : new Date(selectedAppt.date);
+                        setEditData({
+                          date: firstServiceDate.toISOString().split('T')[0],
+                          time: firstServiceDate.toTimeString().substring(0, 5),
+                          notes: selectedAppt.notes || ''
+                        });
+                        setIsEditing(true);
+                      }}
+                      className="px-4 py-2 bg-blue-50 text-blue-700 font-bold rounded-lg hover:bg-blue-100"
+                    >
+                      Edit
+                    </button>
+                    <button 
+                      onClick={() => setIsModalOpen(false)}
+                      className="px-4 py-2 bg-gray-100 text-gray-700 font-bold rounded-lg hover:bg-gray-200"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <button 
+                    onClick={() => setIsEditing(false)}
+                    className="text-gray-600 font-bold text-sm hover:text-gray-800"
+                  >
+                    Back
+                  </button>
+                  <button 
+                    onClick={handleEditSave}
+                    disabled={updateMutation.isPending}
+                    className="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
+                  </button>
+                </>
+              )}
+            </div>
+
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -15,4 +15,8 @@ router.post('/payments', requirePermission('BILLING', 'CREATE'), validate(proces
 router.post('/payments/intent', requirePermission('BILLING', 'CREATE'), validate(paymentIntentSchema), createIntent);
 router.post('/payments/:paymentId/refund', requirePermission('BILLING', 'UPDATE'), validate(refundSchema), refundPayment);
 
+import { getGiftCards, createGiftCard } from '../controllers/pos.controller.js';
+router.get('/gift-cards', requirePermission('BILLING', 'READ'), getGiftCards);
+router.post('/gift-cards', requirePermission('BILLING', 'CREATE'), createGiftCard);
+
 export default router;

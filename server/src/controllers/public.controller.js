@@ -1,171 +1,160 @@
 import { prisma } from '../utils/db.js';
-import { sendBookingConfirmation } from '../utils/notification.service.js';
-import { validateWorkerAvailability } from '../services/appointment.service.js';
+import { sendSuccess } from '../utils/response.util.js';
+import { AppError, NotFoundError } from '../utils/errors.util.js';
+import { notificationQueue } from '../queue/notification.queue.js';
 
-export const getPublicSalons = async (req, res, next) => {
+export const getTenantProfile = async (req, res, next) => {
   try {
-    const salons = await prisma.tenant.findMany({
-      where: { status: 'ACTIVE' },
+    const { tenantId } = req.params;
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId, deletedAt: null },
       select: {
         id: true,
         name: true,
-        branches: {
-          select: {
-            id: true,
-            name: true,
-            address: true
+        logoUrl: true,
+        primaryColor: true,
+        businessHours: true,
+        defaultCurrency: true,
+        defaultTimezone: true
+      }
+    });
+
+    if (!tenant) throw new NotFoundError('Salon not found');
+
+    sendSuccess(res, tenant);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getTenantCatalog = async (req, res, next) => {
+  try {
+    const { tenantId } = req.params;
+
+    const categories = await prisma.serviceCategory.findMany({
+      where: { tenantId, deletedAt: null },
+      include: {
+        services: {
+          where: { isActive: true }
+        }
+      }
+    });
+
+    sendSuccess(res, categories);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getTenantStaff = async (req, res, next) => {
+  try {
+    const { tenantId } = req.params;
+
+    const staff = await prisma.workerProfile.findMany({
+      where: { tenantId, isActive: true },
+      include: {
+        user: {
+          include: {
+            profile: true
           }
         }
       }
     });
 
-    const formattedSalons = salons.map(salon => ({
-      id: salon.id,
-      name: salon.name,
-      rating: 4.8, // Mock rating for now
-      type: 'Salon',
-      location: salon.branches[0]?.address || 'Multiple Locations',
-      branches: salon.branches
-    }));
-
-    res.status(200).json({ success: true, data: formattedSalons });
+    sendSuccess(res, staff);
   } catch (error) {
     next(error);
   }
 };
 
-export const getPublicCatalog = async (req, res, next) => {
+export const createPublicBooking = async (req, res, next) => {
   try {
     const { tenantId } = req.params;
+    const { firstName, lastName, phone, email, date, services } = req.body;
 
-    // Verify tenant exists
-    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId, status: 'ACTIVE' } });
-    if (!tenant) return res.status(404).json({ success: false, error: { message: 'Tenant not found or inactive' } });
-
-    let categories = await prisma.serviceCategory.findMany({
-      where: { tenantId, status: 'ACTIVE' },
-      include: {
-        services: {
-          where: { status: 'ACTIVE' }
-        }
-      },
-      orderBy: { displayOrder: 'asc' }
-    });
-
-    const hasVisibleServices = categories.some(category => category.services?.length > 0);
-    const existingServices = await prisma.service.count({ where: { tenantId, status: 'ACTIVE' } });
-
-    if (!hasVisibleServices && existingServices === 0) {
-      const fallbackCategory = await prisma.serviceCategory.create({
-        data: {
-          tenantId,
-          name: 'General Services',
-          description: 'Default services for booking',
-          status: 'ACTIVE'
-        }
-      });
-
-      const fallbackService = await prisma.service.create({
-        data: {
-          tenantId,
-          categoryId: fallbackCategory.id,
-          name: 'Standard Service',
-          basePrice: 50,
-          baseDuration: 60,
-          status: 'ACTIVE'
-        }
-      });
-
-      categories = [{
-        id: fallbackCategory.id,
-        tenantId,
-        name: fallbackCategory.name,
-        description: fallbackCategory.description,
-        color: fallbackCategory.color,
-        displayOrder: fallbackCategory.displayOrder,
-        status: fallbackCategory.status,
-        createdAt: fallbackCategory.createdAt,
-        updatedAt: fallbackCategory.updatedAt,
-        services: [fallbackService]
-      }];
+    if (!services || services.length === 0) {
+      throw new AppError('At least one service is required', 400);
     }
 
-    res.status(200).json({ success: true, data: categories });
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const getPublicWorkers = async (req, res, next) => {
-  try {
-    const { tenantId } = req.params;
-
-    const workers = await prisma.workerProfile.findMany({
-      where: { tenantId, isActive: true },
-      include: {
-        user: { select: { profile: true } }
-      }
-    });
-
-    res.status(200).json({ success: true, data: workers });
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const createGuestBooking = async (req, res, next) => {
-  try {
-    const { tenantId } = req.params;
-    const { branchId, serviceId, workerProfileId, date, startTime, firstName, lastName, email, phone } = req.body;
-
-    // 1. Find or Create Customer
-    let customer = await prisma.customer.findFirst({
-      where: { tenantId, email }
-    });
+    // 1. Find or create Customer
+    let customer = null;
+    if (phone) {
+      customer = await prisma.customer.findFirst({
+        where: { tenantId, phone }
+      });
+    } else if (email) {
+      customer = await prisma.customer.findFirst({
+        where: { tenantId, email }
+      });
+    }
 
     if (!customer) {
       customer = await prisma.customer.create({
-        data: { tenantId, firstName, lastName, email, phone }
+        data: {
+          tenantId,
+          firstName,
+          lastName,
+          phone,
+          email
+        }
       });
     }
 
-    // 2. Fetch Service details to calculate duration/price
-    const service = await prisma.service.findUnique({ where: { id: serviceId } });
-    if (!service) return res.status(404).json({ success: false, error: { message: 'Service not found' } });
-
-    const start = new Date(`${date}T${startTime}:00Z`);
-    const end = new Date(start.getTime() + service.baseDuration * 60000);
-
-    // Validate worker availability & conflicts
-    await validateWorkerAvailability(tenantId, branchId, workerProfileId, start, end);
-
-    // 3. Create the Booking Transaction
+    // 2. Create the Appointment
     const appointment = await prisma.appointment.create({
       data: {
         tenantId,
-        branchId,
         customerId: customer.id,
         date: new Date(date),
-        totalPrice: service.basePrice,
-        totalDuration: service.baseDuration,
         status: 'PENDING',
+        notes: 'Booked online via Portal',
         services: {
-          create: [{
-            serviceId: service.id,
-            workerProfileId: workerProfileId,
-            startTime: start,
-            endTime: end,
-            price: service.basePrice
-          }]
+          create: services.map(s => ({
+            serviceId: s.serviceId,
+            workerProfileId: s.workerProfileId || null,
+            startTime: new Date(s.startTime),
+            endTime: new Date(s.endTime),
+            price: s.price
+          }))
         }
       },
-      include: { services: true }
+      include: {
+        customer: true,
+        services: { include: { service: true, workerProfile: { include: { user: { include: { profile: true } } } } } }
+      }
     });
 
-    // Send confirmation email asynchronously (fire and forget)
-    sendBookingConfirmation(appointment.id).catch(console.error);
+    // 3. Dispatch Notifications
+    try {
+      const notificationPayload = JSON.stringify({
+        appointmentId: appointment.id,
+        customerName: `${customer.firstName} ${customer.lastName}`,
+        date: appointment.date,
+        services: appointment.services.map(s => s.service.name).join(', ')
+      });
 
-    res.status(201).json({ success: true, data: appointment });
+      if (customer.phone) {
+        await notificationQueue.add('sendSMS', {
+          tenantId,
+          customerId: customer.id,
+          type: 'SMS',
+          subject: 'Appointment Requested',
+          body: `Hi ${customer.firstName}, your appointment request at SalonOS is pending confirmation.`,
+          toPhone: customer.phone
+        });
+      }
+
+      await notificationQueue.add('fireWebhook', {
+        tenantId,
+        type: 'WEBHOOK',
+        subject: 'APPOINTMENT_CREATED',
+        body: notificationPayload
+      });
+    } catch (queueErr) {
+      console.error('[Public Booking] Queue failed:', queueErr.message);
+    }
+
+    sendSuccess(res, appointment, 201);
   } catch (error) {
     next(error);
   }

@@ -136,12 +136,20 @@ const SalaryPage = () => {
       {selectedRun && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-3xl w-full p-6 max-h-[90vh] flex flex-col">
-            <div className="flex justify-between items-center mb-6">
+            <div className="flex justify-between items-center mb-2">
               <h3 className="text-xl font-bold">Payout Details: {selectedRun.id.substring(0, 8)}</h3>
               <span className={`px-3 py-1 text-sm font-bold rounded-full ${selectedRun.status === 'PAID' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
                 {selectedRun.status}
               </span>
             </div>
+            {selectedRun.status === 'DRAFT' && (
+              <p className="text-sm text-yellow-700 bg-yellow-50 p-3 rounded-lg mb-4 border border-yellow-100">
+                <strong>Why is this in DRAFT?</strong> Payroll runs are created as DRAFTs so you can review the payouts. Once you have verified the amounts and paid your staff, click <strong>"Mark as PAID"</strong> below to finalize the run.
+              </p>
+            )}
+            <p className="text-xs text-gray-500 mb-4">
+              <strong>Commission Calculation:</strong> Commission is calculated on the Gross Sales (excluding tax) of services and products linked to the worker on PAID invoices, multiplied by their Base Commission Rate.
+            </p>
             
             <div className="overflow-y-auto flex-1 mb-6">
               <table className="min-w-full divide-y divide-gray-200 border">

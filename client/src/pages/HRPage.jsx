@@ -59,8 +59,43 @@ const HRPage = () => {
     }
   });
 
+  const { data: documentsData } = useQuery({
+    queryKey: ['workerDocuments', selectedWorker?.id],
+    queryFn: async () => {
+      if (!selectedWorker?.id) return [];
+      const res = await api.get(`/hr/workers/${selectedWorker.id}/documents`);
+      return res.data?.data || [];
+    },
+    enabled: !!selectedWorker?.id
+  });
+
+  const addDocument = useMutation({
+    mutationFn: async (data) => api.post(`/hr/workers/${selectedWorker.id}/documents`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['workerDocuments', selectedWorker.id]);
+      alert('Document added successfully');
+    }
+  });
+
   const workers = workersData?.data || [];
   
+  const { data: shiftsData, isLoading: shiftsLoading } = useQuery({
+    queryKey: ['shifts'],
+    queryFn: async () => {
+      const res = await api.get('/hr/shifts');
+      return res.data;
+    }
+  });
+  
+  const saveShifts = useMutation({
+    mutationFn: async (shifts) => api.post('/hr/shifts', { shifts }),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['shifts']);
+      alert('Shifts saved successfully');
+    }
+  });
+
+  const shifts = shiftsData?.data || [];
   // Flatten time off requests for the requests tab
   const allTimeOffRequests = workers.flatMap(w => 
     (w.timeOff || []).map(t => ({ ...t, workerName: w.user?.profile?.firstName + ' ' + w.user?.profile?.lastName }))
@@ -94,6 +129,12 @@ const HRPage = () => {
             className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'TIMEOFF' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
           >
             Time Off Requests
+          </button>
+          <button
+            onClick={() => setActiveTab('SHIFTS')}
+            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'SHIFTS' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
+          >
+            Attendance & Shifts
           </button>
         </nav>
       </div>
@@ -199,7 +240,61 @@ const HRPage = () => {
               ))}
             </tbody>
           </table>
-        )}
+        ) : activeTab === 'SHIFTS' ? (
+          <div className="p-8">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-bold text-gray-900">Weekly Staff Schedule</h2>
+              <button 
+                onClick={() => {
+                  // In a real app, you would have a complex grid editor here.
+                  // For MVP, we simulate a hardcoded save for demonstration.
+                  if(window.confirm('Simulate saving default 9-5 schedule for all staff?')) {
+                    const payload = [];
+                    workers.forEach(w => {
+                      for(let i=1; i<=5; i++) { // Mon-Fri
+                        payload.push({ workerProfileId: w.id, dayOfWeek: i, startTime: "09:00", endTime: "17:00" });
+                      }
+                    });
+                    saveShifts.mutate(payload);
+                  }
+                }}
+                className="bg-indigo-600 text-white px-4 py-2 rounded shadow hover:bg-indigo-700 font-bold"
+              >
+                Auto-Fill 9-5 Schedule
+              </button>
+            </div>
+            
+            {shiftsLoading ? (
+              <p className="text-gray-500">Loading schedules...</p>
+            ) : shifts.length === 0 ? (
+              <p className="text-gray-500 text-center py-8">No shifts scheduled. Use Auto-Fill to generate a default schedule.</p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {workers.map(worker => {
+                  const workerShifts = shifts.filter(s => s.workerProfileId === worker.id);
+                  if (workerShifts.length === 0) return null;
+                  
+                  return (
+                    <div key={worker.id} className="bg-gray-50 border border-gray-200 p-4 rounded-xl">
+                      <h3 className="font-bold text-gray-900 mb-2">{worker.user?.profile?.firstName} {worker.user?.profile?.lastName}</h3>
+                      <div className="space-y-1">
+                        {workerShifts.sort((a,b)=>a.dayOfWeek - b.dayOfWeek).map(s => {
+                          const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                          return (
+                            <div key={s.id} className="flex justify-between text-sm">
+                              <span className="font-medium text-gray-700">{days[s.dayOfWeek]}</span>
+                              <span className="text-gray-500">{s.startTime} - {s.endTime}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        ) : null}
       </div>
 
       {isAddWorkerOpen && (
@@ -311,6 +406,54 @@ const HRPage = () => {
                 <button type="submit" disabled={updateWorker.isPending} className="px-4 py-2 text-white bg-blue-600 rounded hover:bg-blue-700">Save</button>
               </div>
             </form>
+
+            <div className="mt-8 border-t border-gray-200 pt-6">
+              <h4 className="font-bold text-gray-900 mb-4">Documents & Compliance</h4>
+              
+              <div className="space-y-3 mb-6">
+                {!documentsData || documentsData.length === 0 ? (
+                  <p className="text-sm text-gray-500">No documents on file.</p>
+                ) : (
+                  documentsData.map(doc => (
+                    <div key={doc.id} className="flex justify-between items-center p-3 bg-gray-50 rounded border border-gray-200">
+                      <div>
+                        <div className="text-sm font-bold text-gray-900">{doc.documentType}</div>
+                        <div className="text-xs text-gray-500">ID: {doc.documentNumber || 'N/A'}</div>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-xs font-medium text-emerald-600 bg-emerald-100 px-2 py-1 rounded">On File</span>
+                        {doc.expirationDate && <div className="text-xs text-gray-500 mt-1">Exp: {new Date(doc.expirationDate).toLocaleDateString()}</div>}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <form onSubmit={(e) => {
+                e.preventDefault();
+                const formData = new FormData(e.target);
+                addDocument.mutate({
+                  documentType: formData.get('documentType'),
+                  documentNumber: formData.get('documentNumber'),
+                  expirationDate: formData.get('expirationDate')
+                });
+                e.target.reset();
+              }} className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                <div className="space-y-3">
+                  <div>
+                    <input name="documentType" type="text" placeholder="Document Type (e.g., Cosmetology License)" required className="block w-full border border-gray-300 rounded p-2 text-sm" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <input name="documentNumber" type="text" placeholder="License Number" className="block w-full border border-gray-300 rounded p-2 text-sm" />
+                    <input name="expirationDate" type="date" className="block w-full border border-gray-300 rounded p-2 text-sm text-gray-500" />
+                  </div>
+                  <button type="submit" disabled={addDocument.isPending} className="w-full bg-gray-900 text-white rounded p-2 text-sm font-bold">
+                    {addDocument.isPending ? 'Adding...' : 'Add Document'}
+                  </button>
+                </div>
+              </form>
+            </div>
+
           </div>
         </div>
       )}

@@ -1,13 +1,27 @@
-import React from 'react';
-import { useQuery } from '@tanstack/react-query';
+import React, { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../api/axios';
 
 const CustomerWalletPage = () => {
+  const [isTopUpOpen, setIsTopUpOpen] = useState(false);
+  const [topUpAmount, setTopUpAmount] = useState('');
+  const [selectedTenantId, setSelectedTenantId] = useState(null);
+  const queryClient = useQueryClient();
   const { data: walletsData, isLoading } = useQuery({
     queryKey: ['customer-wallets'],
     queryFn: async () => {
       const res = await api.get('/customer-portal/wallets');
       return res.data.data.wallets;
+    }
+  });
+
+  const topUpWallet = useMutation({
+    mutationFn: ({ tenantId, amount }) => api.post(`/customer-portal/wallets/${tenantId}/topup`, { amount: parseFloat(amount) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['customer-wallets']);
+      setIsTopUpOpen(false);
+      setTopUpAmount('');
+      setSelectedTenantId(null);
     }
   });
 
@@ -38,7 +52,7 @@ const CustomerWalletPage = () => {
           <div>
             <p className="text-sm font-medium text-gray-500 uppercase tracking-wider">Total Balance</p>
             <p className="text-3xl font-bold text-gray-900">${totalBalance.toFixed(2)}</p>
-            <p className="text-sm text-green-600 mt-1 cursor-pointer hover:underline">+ Top up wallet</p>
+            {/* The global top up would need to know which tenant to top up. So we put the top up button per tenant below. */}
           </div>
         </div>
 
@@ -72,12 +86,56 @@ const CustomerWalletPage = () => {
                 </div>
                 <div className="text-right">
                   <p className="font-bold text-green-600 text-xl">${wallet.balance.toFixed(2)}</p>
+                  <button 
+                    onClick={() => { setSelectedTenantId(wallet.tenantId); setIsTopUpOpen(true); }}
+                    className="mt-2 text-sm text-indigo-600 hover:text-indigo-900 font-medium"
+                  >
+                    + Top Up
+                  </button>
                 </div>
               </li>
             ))}
           </ul>
         )}
       </div>
+
+      {/* Top-Up Modal */}
+      {isTopUpOpen && (
+        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-sm w-full">
+            <h2 className="text-xl font-bold mb-4">Top Up Wallet</h2>
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              topUpWallet.mutate({ tenantId: selectedTenantId, amount: topUpAmount });
+            }} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Amount ($)</label>
+                <div className="mt-2 flex gap-2">
+                  <button type="button" onClick={() => setTopUpAmount('25')} className={`px-4 py-2 border rounded ${topUpAmount === '25' ? 'bg-indigo-50 border-indigo-500 text-indigo-700' : 'border-gray-300'}`}>$25</button>
+                  <button type="button" onClick={() => setTopUpAmount('50')} className={`px-4 py-2 border rounded ${topUpAmount === '50' ? 'bg-indigo-50 border-indigo-500 text-indigo-700' : 'border-gray-300'}`}>$50</button>
+                  <button type="button" onClick={() => setTopUpAmount('100')} className={`px-4 py-2 border rounded ${topUpAmount === '100' ? 'bg-indigo-50 border-indigo-500 text-indigo-700' : 'border-gray-300'}`}>$100</button>
+                </div>
+                <input 
+                  type="number" 
+                  required 
+                  min="1"
+                  className="mt-4 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" 
+                  placeholder="Custom Amount"
+                  value={topUpAmount} 
+                  onChange={e => setTopUpAmount(e.target.value)} 
+                />
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                Note: In this development environment, payment is simulated and no real card will be charged.
+              </p>
+              <div className="flex justify-end space-x-3 mt-6">
+                <button type="button" onClick={() => setIsTopUpOpen(false)} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md">Cancel</button>
+                <button type="submit" disabled={topUpWallet.isPending || !topUpAmount} className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-md">{topUpWallet.isPending ? 'Processing...' : 'Pay Now'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

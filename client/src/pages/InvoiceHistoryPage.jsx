@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { RefreshCcw, FileText, CheckCircle, Clock } from 'lucide-react';
+import { RefreshCcw, FileText, CheckCircle, Clock, Printer, X } from 'lucide-react';
 import api from '../api/axios';
 
 const InvoiceHistoryPage = () => {
   const [refundingId, setRefundingId] = useState(null);
+  const [printInvoice, setPrintInvoice] = useState(null);
 
   const { data: invoices, isLoading, refetch } = useQuery({
     queryKey: ['invoices'],
@@ -111,16 +112,25 @@ const InvoiceHistoryPage = () => {
                           {inv.status}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right">
+                      <td className="px-6 py-4 whitespace-nowrap text-right space-x-2">
                         {inv.status === 'PAID' && (
-                          <button 
-                            onClick={() => handleRefund(inv)}
-                            disabled={refundingId === inv.id}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-gray-700 hover:text-red-600 hover:border-red-200 hover:bg-red-50 rounded-lg text-xs font-bold transition-all disabled:opacity-50"
-                          >
-                            <RefreshCcw className={`w-3.5 h-3.5 ${refundingId === inv.id ? 'animate-spin' : ''}`} />
-                            {refundingId === inv.id ? 'Refunding...' : 'Refund'}
-                          </button>
+                          <>
+                            <button 
+                              onClick={() => handleRefund(inv)}
+                              disabled={refundingId === inv.id}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-gray-700 hover:text-red-600 hover:border-red-200 hover:bg-red-50 rounded-lg text-xs font-bold transition-all disabled:opacity-50"
+                            >
+                              <RefreshCcw className={`w-3.5 h-3.5 ${refundingId === inv.id ? 'animate-spin' : ''}`} />
+                              {refundingId === inv.id ? 'Refunding...' : 'Refund'}
+                            </button>
+                            <button 
+                              onClick={() => setPrintInvoice(inv)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 border border-indigo-100 text-indigo-700 hover:bg-indigo-100 rounded-lg text-xs font-bold transition-all"
+                            >
+                              <Printer className="w-3.5 h-3.5" />
+                              Print
+                            </button>
+                          </>
                         )}
                         {inv.status === 'DRAFT' && (
                           <button 
@@ -139,6 +149,118 @@ const InvoiceHistoryPage = () => {
           </div>
         </div>
       )}
+
+      {/* Print Receipt Modal */}
+      {printInvoice && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 print:bg-white print:p-0">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 print:shadow-none print:w-full print:max-w-none print:m-0 print:border-none">
+            
+            {/* Non-printable header */}
+            <div className="flex justify-between items-center mb-6 print:hidden border-b pb-4">
+              <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                <Printer className="w-5 h-5 text-indigo-600" />
+                Print Receipt
+              </h3>
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => window.print()}
+                  className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-indigo-700 transition"
+                >
+                  Print Now
+                </button>
+                <button 
+                  onClick={() => setPrintInvoice(null)}
+                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+            </div>
+
+            {/* Printable Area */}
+            <div className="print-area">
+              <div className="text-center mb-6 border-b-2 border-dashed border-gray-200 pb-6">
+                <h2 className="text-2xl font-extrabold text-gray-900 uppercase tracking-widest">SalonOS</h2>
+                <p className="text-sm text-gray-500 mt-1 font-medium">Premium Hair & Beauty</p>
+                <p className="text-xs text-gray-400 mt-2">Receipt #{printInvoice.id.substring(0, 8).toUpperCase()}</p>
+                <p className="text-xs text-gray-400">{new Date(printInvoice.createdAt).toLocaleString()}</p>
+              </div>
+
+              <div className="mb-6">
+                <p className="text-sm font-bold text-gray-800">Customer Details</p>
+                <p className="text-sm text-gray-600 mt-1">
+                  {printInvoice.appointment?.customer?.firstName} {printInvoice.appointment?.customer?.lastName || 'Walk-in'}
+                </p>
+              </div>
+
+              <table className="w-full text-sm mb-6">
+                <thead>
+                  <tr className="border-b border-gray-200">
+                    <th className="text-left py-2 text-gray-600 font-bold">Item</th>
+                    <th className="text-right py-2 text-gray-600 font-bold">Price</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 border-b border-gray-200">
+                  {/* Appointment Services */}
+                  {printInvoice.appointment?.services?.map((s) => (
+                    <tr key={s.id}>
+                      <td className="py-3 text-gray-800 font-medium">
+                        {s.service?.name}
+                        <div className="text-xs text-gray-400 font-normal">By {s.worker?.user?.profile?.firstName}</div>
+                      </td>
+                      <td className="py-3 text-right text-gray-900 font-bold">${s.price.toFixed(2)}</td>
+                    </tr>
+                  ))}
+                  {/* Walk-in products or additional items if present */}
+                  {printInvoice.items?.map((item, idx) => (
+                    <tr key={idx}>
+                      <td className="py-3 text-gray-800 font-medium">{item.name || 'Product'} x{item.quantity}</td>
+                      <td className="py-3 text-right text-gray-900 font-bold">${(item.price * (item.quantity||1)).toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              <div className="flex justify-between items-center py-2 text-sm text-gray-600">
+                <span>Subtotal</span>
+                <span>${(printInvoice.grandTotal).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between items-center py-2 text-sm text-gray-600 border-b border-gray-200">
+                <span>Tax (Included)</span>
+                <span>$0.00</span>
+              </div>
+              
+              <div className="flex justify-between items-center py-4 text-lg font-extrabold text-gray-900">
+                <span>Total Paid</span>
+                <span>${printInvoice.grandTotal.toFixed(2)}</span>
+              </div>
+
+              <div className="text-center mt-8 text-sm text-gray-500 font-medium">
+                <p>Thank you for your visit!</p>
+                <p className="text-xs mt-1 text-gray-400">Powered by SalonOS</p>
+              </div>
+            </div>
+            
+            <style jsx>{`
+              @media print {
+                body * {
+                  visibility: hidden;
+                }
+                .print-area, .print-area * {
+                  visibility: visible;
+                }
+                .print-area {
+                  position: absolute;
+                  left: 0;
+                  top: 0;
+                  width: 100%;
+                }
+              }
+            `}</style>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

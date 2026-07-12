@@ -1,34 +1,19 @@
-# Build Stage
-FROM node:22-slim AS builder
-RUN apt-get update -y && apt-get install -y openssl
+FROM node:18-alpine
 
 WORKDIR /app
 
-# Copy package.json and install dependencies
+# Install dependencies
 COPY package*.json ./
-RUN npm ci --omit=dev
+RUN npm install
 
-# Copy prisma schema and generate client
-COPY prisma ./prisma/
-RUN npx prisma generate
-
-# Copy source code
+# Copy source and prisma
 COPY . .
 
-# Production Stage
-FROM node:22-slim
-RUN apt-get update -y && apt-get install -y openssl
+# Generate Prisma Client
+RUN npx prisma generate
 
-WORKDIR /app
-
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package*.json ./
-COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/src ./src
-
-ENV NODE_ENV=production
-ENV PORT=5000
-
+# Expose port
 EXPOSE 5000
 
+# Start server
 CMD ["npm", "start"]

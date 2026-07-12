@@ -19,6 +19,7 @@ const OwnerLayout = () => {
     { path: '/owner/expenses', label: 'Expenses', icon: '💸' },
     { path: '/owner/salary', label: 'Payroll', icon: '💰' },
     { path: '/owner/reports', label: 'Reports', icon: '📈' },
+    { path: '/owner/marketing', label: 'Marketing', icon: '🚀' },
     { path: '/owner/settings', label: 'Settings', icon: '⚙️' },
   ];
 

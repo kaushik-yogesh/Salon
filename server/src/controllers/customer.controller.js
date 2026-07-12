@@ -55,6 +55,13 @@ export const getCustomerById = async (req, res, next) => {
               include: { service: true }
             }
           }
+        },
+        Invoice: {
+          orderBy: { createdAt: 'desc' },
+          take: 10,
+          include: {
+            lineItems: true
+          }
         }
       }
     });
@@ -70,7 +77,7 @@ export const getCustomerById = async (req, res, next) => {
 export const createCustomer = async (req, res, next) => {
   try {
     const { tenantId } = req.user;
-    const { firstName, lastName, email, phone, notes } = req.body;
+    const { firstName, lastName, email, phone, notes, tags } = req.body;
 
     // Check if email already exists for this tenant
     if (email) {
@@ -85,7 +92,8 @@ export const createCustomer = async (req, res, next) => {
         lastName,
         email: email || null,
         phone: phone || null,
-        notes: notes || null
+        notes: notes || null,
+        tags: tags || []
       }
     });
 
@@ -99,7 +107,7 @@ export const updateCustomer = async (req, res, next) => {
   try {
     const { tenantId } = req.user;
     const { id } = req.params;
-    const { firstName, lastName, email, phone, notes } = req.body;
+    const { firstName, lastName, email, phone, notes, tags } = req.body;
 
     const customer = await prisma.customer.findFirst({ where: { id, tenantId } });
     if (!customer) throw new NotFoundError('Customer not found');
@@ -111,7 +119,7 @@ export const updateCustomer = async (req, res, next) => {
 
     const updated = await prisma.customer.update({
       where: { id },
-      data: { firstName, lastName, email, phone, notes }
+      data: { firstName, lastName, email, phone, notes, tags }
     });
 
     sendSuccess(res, { customer: updated });
@@ -133,6 +141,49 @@ export const deleteCustomer = async (req, res, next) => {
     await prisma.customer.delete({ where: { id } });
 
     sendSuccess(res, { message: 'Customer deleted successfully' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const importCustomers = async (req, res, next) => {
+  try {
+    const { tenantId } = req.user;
+    const { customers } = req.body; // Array of { firstName, lastName, email, phone, notes }
+
+    if (!Array.isArray(customers) || customers.length === 0) {
+      throw new AppError('No customers provided for import', 400);
+    }
+
+    // Filter out invalid records
+    const validCustomers = customers.filter(c => c.firstName);
+
+    if (validCustomers.length === 0) {
+      throw new AppError('No valid customers found in import data', 400);
+    }
+
+    const dataToInsert = validCustomers.map(c => ({
+      tenantId,
+      firstName: String(c.firstName).trim(),
+      lastName: c.lastName ? String(c.lastName).trim() : '',
+      email: c.email ? String(c.email).trim().toLowerCase() : null,
+      phone: c.phone ? String(c.phone).trim() : null,
+      notes: c.notes ? String(c.notes).trim() : null,
+      tags: []
+    }));
+
+    // Create many (Note: Prisma createMany on PostgreSQL might fail if there are unique constraint violations like email, 
+    // but the schema says email is NOT unique across the whole table, it's unique by [tenantId, email].
+    // Prisma createMany skipDuplicates is supported on Postgres)
+    const result = await prisma.customer.createMany({
+      data: dataToInsert,
+      skipDuplicates: true
+    });
+
+    sendSuccess(res, { 
+      message: `Successfully imported ${result.count} customers`,
+      count: result.count
+    }, 201);
   } catch (error) {
     next(error);
   }
