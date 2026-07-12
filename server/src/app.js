@@ -23,7 +23,26 @@ app.use(helmet({
 import RedisStore from 'rate-limit-redis';
 import Redis from 'ioredis';
 
-const redisClient = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
+// Redis is optional — falls back to in-memory if REDIS_URL is not set
+let redisClient = null;
+let rateLimitStore = undefined; // undefined = use default in-memory store
+
+if (process.env.REDIS_URL) {
+  try {
+    redisClient = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: 3, lazyConnect: true });
+    redisClient.on('error', (err) => {
+      if (err.code !== 'ECONNREFUSED') console.error('[Redis Rate-Limit Error]:', err.message);
+    });
+    rateLimitStore = new RedisStore({
+      sendCommand: (...args) => redisClient.call(...args),
+    });
+    console.log('[Rate Limiter] Using Redis store');
+  } catch (e) {
+    console.warn('[Rate Limiter] Redis unavailable, falling back to in-memory store');
+  }
+} else {
+  console.log('[Rate Limiter] No REDIS_URL set, using in-memory store');
+}
 
 // Rate Limiting
 const limiter = rateLimit({
@@ -32,9 +51,7 @@ const limiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, error: { message: 'Too many requests, please try again later.' } },
-  store: new RedisStore({
-    sendCommand: (...args) => redisClient.call(...args),
-  }),
+  ...(rateLimitStore ? { store: rateLimitStore } : {}),
 });
 app.use('/api', limiter);
 
