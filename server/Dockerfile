@@ -5,7 +5,7 @@ WORKDIR /app
 ENV PYTHON=python3
 
 # Install build dependencies needed for native modules like argon2
-RUN apt-get update && apt-get install -y python3 build-essential && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y python3 build-essential unzip && rm -rf /var/lib/apt/lists/*
 
 # Install dependencies
 COPY package*.json ./
