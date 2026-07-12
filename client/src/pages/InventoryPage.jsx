@@ -85,6 +85,7 @@ const InventoryPage = () => {
             </button>
           ))}
         </div>
+      </div>
 
       {activeTab === 'products' && (
         <div className="bg-white rounded-xl shadow border border-gray-200 overflow-hidden mb-6">

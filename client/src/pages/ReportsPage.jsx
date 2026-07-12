@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import api from '../api/axios';
 
+const ReportsPage = () => {
   const [dateRange, setDateRange] = useState({
     startDate: new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0],
     endDate: new Date().toISOString().split('T')[0]

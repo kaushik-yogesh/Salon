@@ -2,7 +2,6 @@ import { Queue, Worker } from 'bullmq';
 import { prisma } from '../utils/db.js';
 import axios from 'axios';
 import { sendSms } from '../services/sms.service.js';
-import { sendSms } from '../services/sms.service.js';
 
 // Setup Redis Connection
 const connection = {

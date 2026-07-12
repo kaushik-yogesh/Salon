@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import api from '../utils/api';
+import api from '../api/axios';
 
 const MarketingPage = () => {
   const queryClient = useQueryClient();
