@@ -65,7 +65,7 @@ const LoginPage = () => {
         setError("No account found. Please register first.");
       }
     } catch (err) {
-      setError(err.response?.data?.error?.message || "Failed to check account");
+      setError(err.friendlyMessage || err.response?.data?.error?.message || "Failed to check account");
     } finally {
       setIsLoading(false);
     }
@@ -84,7 +84,7 @@ const LoginPage = () => {
       setAuthStore(user, null);
       navigate(getPortalRouteByRoles(user.userRoles?.map((ur) => ur.role) || []));
     } catch (err) {
-      setError(err.response?.data?.error?.message || "Invalid credentials");
+      setError(err.friendlyMessage || err.response?.data?.error?.message || "Invalid credentials");
     } finally {
       setIsLoading(false);
     }
@@ -110,7 +110,7 @@ const LoginPage = () => {
         navigate(getPortalRouteByRoles(user.userRoles?.map((ur) => ur.role) || []));
       }
     } catch (err) {
-      setError(err.response?.data?.error?.message || "Invalid OTP");
+      setError(err.friendlyMessage || err.response?.data?.error?.message || "Invalid OTP");
     } finally {
       setIsLoading(false);
     }

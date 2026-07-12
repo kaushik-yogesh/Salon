@@ -458,6 +458,15 @@ export const updateEmail = async (req, res, next) => {
   }
 };
 
+// Clear refresh token cookie
+const clearRefreshCookie = (res) => {
+  res.clearCookie('refreshToken', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+  });
+};
+
 export const refresh = async (req, res, next) => {
   try {
     const refreshToken = req.cookies?.refreshToken;
@@ -474,14 +483,14 @@ export const refresh = async (req, res, next) => {
 
     sendSuccess(res, { accessToken });
   } catch (_error) {
-    res.clearCookie('refreshToken');
+    clearRefreshCookie(res);
     next(new UnauthorizedError('Invalid refresh token'));
   }
 };
 
 export const logout = async (req, res, next) => {
   try {
-    res.clearCookie('refreshToken');
+    clearRefreshCookie(res);
     sendSuccess(res, { message: 'Logged out successfully' });
   } catch (error) {
     next(error);

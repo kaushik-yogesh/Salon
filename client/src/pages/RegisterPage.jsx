@@ -80,7 +80,7 @@ const RegisterPage = () => {
         navigate(getPortalRouteByRoles(user.userRoles?.map((ur) => ur.role) || []));
       }
     } catch (err) {
-      setError(err.response?.data?.error?.message || "Registration failed");
+      setError(err.friendlyMessage || err.response?.data?.error?.message || "Registration failed");
     } finally {
       setIsLoading(false);
     }
@@ -128,7 +128,7 @@ const RegisterPage = () => {
         navigate(getPortalRouteByRoles(user.userRoles?.map((ur) => ur.role) || []));
       }
     } catch (err) {
-      setError(err.response?.data?.error?.message || "Registration failed");
+      setError(err.friendlyMessage || err.response?.data?.error?.message || "Registration failed");
     } finally {
       setIsLoading(false);
     }
