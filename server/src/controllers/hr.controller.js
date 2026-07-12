@@ -20,7 +20,7 @@ export const getWorkers = async (req, res, next) => {
     const tenantId = req.tenant.id;
     
     const workers = await prisma.workerProfile.findMany({
-      where: { tenantId, isActive: true },
+      where: { tenantId },
       include: {
         user: { include: { profile: true } },
         services: { include: { service: true } },

@@ -1,5 +1,5 @@
 import express from 'express';
-import { generateSalaryRun, getSalaryRuns } from '../controllers/salary.controller.js';
+import { generateSalaryRun, getSalaryRuns, markSalaryRunPaid } from '../controllers/salary.controller.js';
 import { requireAuth, requireTenantContext } from '../middlewares/auth.middleware.js';
 import { requirePermission } from '../middlewares/rbac.middleware.js';
 import { validate } from '../middlewares/validate.middleware.js';
@@ -12,5 +12,6 @@ router.use(requireTenantContext);
 
 router.get('/', requirePermission('FINANCE', 'READ'), getSalaryRuns);
 router.post('/generate', requirePermission('FINANCE', 'CREATE'), validate(generateSalarySchema), generateSalaryRun);
+router.put('/:id/pay', requirePermission('FINANCE', 'UPDATE'), markSalaryRunPaid);
 
 export default router;

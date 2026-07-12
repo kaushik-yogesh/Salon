@@ -5,6 +5,7 @@ import api from '../api/axios';
 const SalaryPage = () => {
   const queryClient = useQueryClient();
   const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false);
+  const [selectedRun, setSelectedRun] = useState(null);
 
   const { data: salaryData, isLoading } = useQuery({
     queryKey: ['salary-runs'],
@@ -19,6 +20,14 @@ const SalaryPage = () => {
     onSuccess: () => {
       queryClient.invalidateQueries(['salary-runs']);
       setIsGenerateModalOpen(false);
+    }
+  });
+
+  const markPaid = useMutation({
+    mutationFn: async (id) => api.put(`/salary/${id}/pay`),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['salary-runs']);
+      setSelectedRun(null);
     }
   });
 
@@ -53,6 +62,7 @@ const SalaryPage = () => {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Generated On</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Total Payout</th>
                 <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -71,9 +81,14 @@ const SalaryPage = () => {
                     ${run.totalPayout.toFixed(2)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-center">
-                    <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
+                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${run.status === 'PAID' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
                       {run.status}
                     </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <button onClick={() => setSelectedRun(run)} className="text-indigo-600 hover:text-indigo-900">
+                      View Details
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -114,6 +129,62 @@ const SalaryPage = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {selectedRun && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-3xl w-full p-6 max-h-[90vh] flex flex-col">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold">Payout Details: {selectedRun.id.substring(0, 8)}</h3>
+              <span className={`px-3 py-1 text-sm font-bold rounded-full ${selectedRun.status === 'PAID' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                {selectedRun.status}
+              </span>
+            </div>
+            
+            <div className="overflow-y-auto flex-1 mb-6">
+              <table className="min-w-full divide-y divide-gray-200 border">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-2 text-left text-xs font-bold text-gray-500 uppercase">Worker</th>
+                    <th className="px-4 py-2 text-right text-xs font-bold text-gray-500 uppercase">Base Salary</th>
+                    <th className="px-4 py-2 text-right text-xs font-bold text-gray-500 uppercase">Commission</th>
+                    <th className="px-4 py-2 text-right text-xs font-bold text-gray-500 uppercase">Tips</th>
+                    <th className="px-4 py-2 text-right text-xs font-bold text-gray-500 uppercase">Net Payout</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {selectedRun.items?.map(item => (
+                    <tr key={item.id}>
+                      <td className="px-4 py-2 text-sm font-medium text-gray-900">
+                        {item.workerProfile?.user?.profile?.firstName} {item.workerProfile?.user?.profile?.lastName}
+                      </td>
+                      <td className="px-4 py-2 text-sm text-right">${item.baseSalary.toFixed(2)}</td>
+                      <td className="px-4 py-2 text-sm text-right text-blue-600">${item.commissionTotal.toFixed(2)}</td>
+                      <td className="px-4 py-2 text-sm text-right">${item.tipsTotal.toFixed(2)}</td>
+                      <td className="px-4 py-2 text-sm font-bold text-right text-green-600">${item.netPayout.toFixed(2)}</td>
+                    </tr>
+                  ))}
+                  {selectedRun.items?.length === 0 && (
+                    <tr><td colSpan="5" className="text-center py-4 text-gray-500">No payouts calculated for this period.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex justify-end gap-3 mt-auto">
+              <button onClick={() => setSelectedRun(null)} className="px-4 py-2 text-gray-700 bg-gray-100 rounded hover:bg-gray-200 font-bold transition">Close</button>
+              {selectedRun.status === 'DRAFT' && (
+                <button 
+                  onClick={() => { if(window.confirm('Are you sure you want to mark this run as PAID?')) markPaid.mutate(selectedRun.id); }}
+                  disabled={markPaid.isPending}
+                  className="px-4 py-2 text-white bg-green-600 rounded hover:bg-green-700 font-bold transition shadow-sm"
+                >
+                  {markPaid.isPending ? 'Processing...' : 'Mark as PAID'}
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}

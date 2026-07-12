@@ -39,6 +39,16 @@ const InvoiceHistoryPage = () => {
     }
   };
 
+  const handleVoid = async (id) => {
+    if (!window.confirm('Are you sure you want to void this DRAFT invoice?')) return;
+    try {
+      await api.delete(`/invoices/${id}`);
+      refetch();
+    } catch (err) {
+      alert(err.response?.data?.error?.message || "Failed to void invoice.");
+    }
+  };
+
   return (
     <div className="p-4 md:p-8 max-w-7xl mx-auto">
       <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -110,6 +120,14 @@ const InvoiceHistoryPage = () => {
                           >
                             <RefreshCcw className={`w-3.5 h-3.5 ${refundingId === inv.id ? 'animate-spin' : ''}`} />
                             {refundingId === inv.id ? 'Refunding...' : 'Refund'}
+                          </button>
+                        )}
+                        {inv.status === 'DRAFT' && (
+                          <button 
+                            onClick={() => handleVoid(inv.id)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-gray-700 hover:text-red-600 hover:border-red-200 hover:bg-red-50 rounded-lg text-xs font-bold transition-all"
+                          >
+                            Void
                           </button>
                         )}
                       </td>

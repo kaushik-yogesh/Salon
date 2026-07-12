@@ -30,6 +30,15 @@ export const checkoutAppointment = async (req, res, next) => {
       additionalProducts
     );
 
+    // Clear any existing DRAFT invoice for this appointment to prevent duplicates
+    await prisma.invoice.deleteMany({
+      where: {
+        appointmentId: appointment.id,
+        tenantId,
+        status: 'DRAFT'
+      }
+    });
+
     // Create DRAFT Invoice
     const invoice = await prisma.invoice.create({
       data: {

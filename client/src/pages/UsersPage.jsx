@@ -5,6 +5,8 @@ import api from '../api/axios';
 const UsersPage = () => {
   const queryClient = useQueryClient();
   const [isInviteOpen, setIsInviteOpen] = useState(false);
+  const [isEditUserOpen, setIsEditUserOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState(null);
 
   const { data: usersData, isLoading, error } = useQuery({
     queryKey: ['users'],
@@ -27,6 +29,22 @@ const UsersPage = () => {
     onSuccess: () => {
       queryClient.invalidateQueries(['users']);
       setIsInviteOpen(false);
+    }
+  });
+
+  const updateStatus = useMutation({
+    mutationFn: async ({ id, status }) => api.put(`/users/${id}/status`, { status }),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['users']);
+      setIsEditUserOpen(false);
+      setSelectedUser(null);
+    }
+  });
+
+  const removeUser = useMutation({
+    mutationFn: async (id) => api.delete(`/users/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['users']);
     }
   });
 
@@ -80,7 +98,20 @@ const UsersPage = () => {
                       {user.status}
                     </span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium text-blue-600 hover:text-blue-900 cursor-pointer">Edit</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <button 
+                      onClick={() => { setSelectedUser(user); setIsEditUserOpen(true); }}
+                      className="text-indigo-600 hover:text-indigo-900"
+                    >
+                      Edit
+                    </button>
+                    <button 
+                      onClick={() => { if(window.confirm('Are you sure you want to remove this user?')) removeUser.mutate(user.id); }}
+                      className="text-red-600 hover:text-red-900 ml-4"
+                    >
+                      Remove
+                    </button>
+                  </td>
                 </tr>
               ))
             )}
@@ -117,6 +148,37 @@ const UsersPage = () => {
               <div className="mt-6 flex justify-end space-x-3">
                 <button type="button" onClick={() => setIsInviteOpen(false)} className="px-4 py-2 text-gray-700 bg-gray-100 rounded hover:bg-gray-200">Cancel</button>
                 <button type="submit" disabled={inviteUser.isPending} className="px-4 py-2 text-white bg-blue-600 rounded hover:bg-blue-700">Send Invite</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {isEditUserOpen && selectedUser && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+            <h3 className="text-lg font-bold mb-4">Edit User Status</h3>
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              const formData = new FormData(e.target);
+              updateStatus.mutate({
+                id: selectedUser.id,
+                status: formData.get('status')
+              });
+            }}>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Status</label>
+                  <select name="status" defaultValue={selectedUser.status} className="mt-1 block w-full border border-gray-300 rounded-md p-2">
+                    <option value="ACTIVE">Active</option>
+                    <option value="INACTIVE">Inactive</option>
+                    <option value="SUSPENDED">Suspended</option>
+                  </select>
+                </div>
+              </div>
+              <div className="mt-6 flex justify-end space-x-3">
+                <button type="button" onClick={() => { setIsEditUserOpen(false); setSelectedUser(null); }} className="px-4 py-2 text-gray-700 bg-gray-100 rounded hover:bg-gray-200">Cancel</button>
+                <button type="submit" disabled={updateStatus.isPending} className="px-4 py-2 text-white bg-blue-600 rounded hover:bg-blue-700">Save</button>
               </div>
             </form>
           </div>

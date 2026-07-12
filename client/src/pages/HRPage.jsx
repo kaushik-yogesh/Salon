@@ -6,8 +6,10 @@ const HRPage = () => {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState('WORKERS');
   const [isAddWorkerOpen, setIsAddWorkerOpen] = useState(false);
+  const [isEditWorkerOpen, setIsEditWorkerOpen] = useState(false);
   const [isTimeOffOpen, setIsTimeOffOpen] = useState(false);
   const [selectedWorkerId, setSelectedWorkerId] = useState(null);
+  const [selectedWorker, setSelectedWorker] = useState(null);
 
   const { data: workersData, isLoading } = useQuery({
     queryKey: ['workers'],
@@ -22,6 +24,22 @@ const HRPage = () => {
     onSuccess: () => {
       queryClient.invalidateQueries(['workers']);
       setIsAddWorkerOpen(false);
+    }
+  });
+
+  const updateWorker = useMutation({
+    mutationFn: async ({ id, data }) => api.put(`/hr/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['workers']);
+      setIsEditWorkerOpen(false);
+      setSelectedWorker(null);
+    }
+  });
+
+  const deleteWorker = useMutation({
+    mutationFn: async (id) => api.delete(`/hr/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['workers']);
     }
   });
 
@@ -117,10 +135,22 @@ const HRPage = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <button 
+                      onClick={() => { setSelectedWorker(worker); setIsEditWorkerOpen(true); }}
+                      className="text-indigo-600 hover:text-indigo-900"
+                    >
+                      Edit
+                    </button>
+                    <button 
                       onClick={() => { setSelectedWorkerId(worker.id); setIsTimeOffOpen(true); }}
                       className="text-blue-600 hover:text-blue-900 ml-4"
                     >
-                      Request Time Off
+                      Time Off
+                    </button>
+                    <button 
+                      onClick={() => { if(window.confirm('Are you sure you want to remove this worker?')) deleteWorker.mutate(worker.id); }}
+                      className="text-red-600 hover:text-red-900 ml-4"
+                    >
+                      Remove
                     </button>
                   </td>
                 </tr>
@@ -232,6 +262,53 @@ const HRPage = () => {
               <div className="mt-6 flex justify-end space-x-3">
                 <button type="button" onClick={() => setIsAddWorkerOpen(false)} className="px-4 py-2 text-gray-700 bg-gray-100 rounded hover:bg-gray-200">Cancel</button>
                 <button type="submit" disabled={createWorker.isPending} className="px-4 py-2 text-white bg-blue-600 rounded hover:bg-blue-700">Add</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {isEditWorkerOpen && selectedWorker && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-bold mb-4">Edit Staff Member</h3>
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              const formData = new FormData(e.target);
+              updateWorker.mutate({
+                id: selectedWorker.id,
+                data: {
+                  title: formData.get('title'),
+                  bio: formData.get('bio'),
+                  baseCommissionRate: parseFloat(formData.get('commission') || 0) / 100,
+                  isActive: formData.get('isActive') === 'true'
+                }
+              });
+            }}>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Job Title</label>
+                  <input name="title" type="text" defaultValue={selectedWorker.title} className="mt-1 block w-full border border-gray-300 rounded-md p-2" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Commission Rate (%)</label>
+                  <input name="commission" type="number" min="0" max="100" defaultValue={selectedWorker.baseCommissionRate * 100} className="mt-1 block w-full border border-gray-300 rounded-md p-2" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Bio</label>
+                  <textarea name="bio" defaultValue={selectedWorker.bio} className="mt-1 block w-full border border-gray-300 rounded-md p-2" rows="2"></textarea>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Status</label>
+                  <select name="isActive" defaultValue={selectedWorker.isActive ? "true" : "false"} className="mt-1 block w-full border border-gray-300 rounded-md p-2">
+                    <option value="true">Active</option>
+                    <option value="false">Inactive</option>
+                  </select>
+                </div>
+              </div>
+              <div className="mt-6 flex justify-end space-x-3">
+                <button type="button" onClick={() => { setIsEditWorkerOpen(false); setSelectedWorker(null); }} className="px-4 py-2 text-gray-700 bg-gray-100 rounded hover:bg-gray-200">Cancel</button>
+                <button type="submit" disabled={updateWorker.isPending} className="px-4 py-2 text-white bg-blue-600 rounded hover:bg-blue-700">Save</button>
               </div>
             </form>
           </div>

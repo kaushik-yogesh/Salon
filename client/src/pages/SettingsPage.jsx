@@ -61,6 +61,13 @@ const SettingsPage = () => {
     }
   });
 
+  const deleteBranch = useMutation({
+    mutationFn: async (id) => api.delete(`/branches/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['branches']);
+    }
+  });
+
   const sendTestPush = async () => {
     setTestPushStatus('sending');
     try {
@@ -149,9 +156,15 @@ const SettingsPage = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <button 
                         onClick={() => { setEditingBranch(branch); setIsBranchModalOpen(true); }}
-                        className="text-blue-600 hover:text-blue-900"
+                        className="text-indigo-600 hover:text-indigo-900"
                       >
                         Edit
+                      </button>
+                      <button 
+                        onClick={() => { if(window.confirm('Are you sure you want to remove this branch?')) deleteBranch.mutate(branch.id); }}
+                        className="text-red-600 hover:text-red-900 ml-4"
+                      >
+                        Remove
                       </button>
                     </td>
                   </tr>

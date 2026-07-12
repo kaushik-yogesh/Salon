@@ -58,7 +58,7 @@ export const calculateWorkerPayouts = async (tenantId, periodStart, periodEnd) =
     if (!worker) continue;
 
     const commissionRate = worker.baseCommissionRate || 0;
-    const commissionTotal = totals.grossSales * (commissionRate / 100);
+    const commissionTotal = totals.grossSales * commissionRate;
     // Base salary is assumed 0 for pure commission structure, can be expanded later
     const baseSalary = 0; 
 

@@ -61,3 +61,40 @@ export const getSalaryRuns = async (req, res, next) => {
     next(error);
   }
 };
+
+export const markSalaryRunPaid = async (req, res, next) => {
+  try {
+    const tenantId = req.tenant.id;
+    const { id } = req.params;
+
+    const run = await prisma.salaryRun.findUnique({
+      where: { id, tenantId }
+    });
+
+    if (!run) {
+      return res.status(404).json({ success: false, error: { message: 'Salary run not found' } });
+    }
+
+    if (run.status === 'PAID') {
+      return res.status(400).json({ success: false, error: { message: 'Already paid' } });
+    }
+
+    const updatedRun = await prisma.salaryRun.update({
+      where: { id },
+      data: { status: 'PAID' }
+    });
+
+    await logActivity({
+      tenantId,
+      actorId: req.user.id,
+      action: 'SALARY_RUN_PAID',
+      resourceType: 'SalaryRun',
+      resourceId: updatedRun.id,
+      ipAddress: req.ip
+    });
+
+    sendSuccess(res, updatedRun);
+  } catch (error) {
+    next(error);
+  }
+};

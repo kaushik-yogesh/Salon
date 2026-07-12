@@ -54,3 +54,25 @@ export const getAllInvoices = async (req, res, next) => {
     next(error);
   }
 };
+
+export const voidInvoice = async (req, res, next) => {
+  try {
+    const tenantId = req.tenant.id;
+    const { id } = req.params;
+
+    const invoice = await prisma.invoice.findUnique({
+      where: { id, tenantId }
+    });
+
+    if (!invoice) return res.status(404).json({ success: false, error: { message: 'Invoice not found' } });
+    if (invoice.status !== 'DRAFT') return res.status(400).json({ success: false, error: { message: 'Only DRAFT invoices can be voided' } });
+
+    await prisma.invoice.delete({
+      where: { id }
+    });
+
+    sendSuccess(res, { message: 'Invoice voided successfully' });
+  } catch (error) {
+    next(error);
+  }
+};
