@@ -7,7 +7,7 @@ import { UnauthorizedError, AppError, NotFoundError } from '../utils/errors.util
 import { sendSms } from '../services/sms.service.js';
 import { sendEmail } from '../services/email.service.js';
 
-const ACCESS_TOKEN_EXPIRY = '15m';
+const ACCESS_TOKEN_EXPIRY = '60d';
 const REFRESH_TOKEN_EXPIRY = '7d';
 const REFRESH_TOKEN_MS = 7 * 24 * 60 * 60 * 1000;
 
